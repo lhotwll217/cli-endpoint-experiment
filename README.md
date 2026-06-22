@@ -101,7 +101,19 @@ Required for benchmark runs:
 - `POSTHOG_ORGANIZATION_ID` for project listing
 - `POSTHOG_ENVIRONMENT_ID` for insights/dashboards, or it falls back to `POSTHOG_PROJECT_ID`
 
-CLI mode uses the local `@posthog/cli` package when available and otherwise falls back to `posthog-cli` on the server PATH. MCP mode defaults to `https://mcp.posthog.com/mcp` and uses `POSTHOG_MCP_AUTH_HEADER` when set, otherwise `Bearer ${POSTHOG_PERSONAL_API_KEY}`.
+CLI mode uses the pinned `@posthog/cli` package from the app runtime
+(`node_modules/.bin/posthog-cli`) when available and only falls back to a
+`posthog-cli` binary on the server PATH if the local package is missing. MCP
+mode runs through the pinned `@modelcontextprotocol/sdk` package in the app's
+Node runtime, defaults to `https://mcp.posthog.com/mcp`, and uses
+`POSTHOG_MCP_AUTH_HEADER` when set, otherwise
+`Bearer ${POSTHOG_PERSONAL_API_KEY}`.
+
+Current pinned integration runtime versions:
+
+- `@posthog/cli`: `0.7.30`
+- `@modelcontextprotocol/sdk`: `1.29.0`
+- `mcp-remote`: `0.1.38`
 
 ## Scripts
 
