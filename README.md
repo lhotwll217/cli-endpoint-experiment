@@ -30,6 +30,20 @@ That tool calls an internal HTTP endpoint, `POST /api/cli`, which validates a
 single `posthog-cli ...` invocation, parses it into argv, spawns the CLI without
 a shell, and streams stdout/stderr/exit data back to the agent.
 
+For example, the agent can discover the CLI surface through the endpoint first:
+
+```bash
+curl -N http://localhost:3322/api/cli \
+  -H "Content-Type: application/json" \
+  -d '{"command":"posthog-cli --help"}'
+```
+
+That single call gives the agent the same starting point a human gets in a
+terminal: available commands, options, and follow-up help paths such as
+`posthog-cli exp --help` or `posthog-cli exp query run --help`. The experiment is
+whether this progressive discovery is enough for useful agent workflows without
+pre-modeling every API capability as a typed tool.
+
 This is the core experiment: can an agent use a CLI through a minimal HTTP
 wrapper with progressive discovery, without needing a large typed integration
 layer?
