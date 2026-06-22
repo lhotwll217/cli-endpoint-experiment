@@ -1,0 +1,161 @@
+description: Real-world PostHog endpoint benchmark
+
+prompts:
+  - "{{prompt}}"
+
+providers:
+  - id: http
+    label: CLI string tool
+    config:
+      url: http://localhost:3322/api/benchmark/run
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        approach: cli
+        prompt: "{{prompt}}"
+        stream: false
+      transformResponse: |
+        {
+          output: json.output || "",
+          tokenUsage: json.tokenUsage,
+          metadata: {
+            approach: json.approach,
+            status: json.status,
+            metrics: json.metrics,
+            traces: json.traces
+          }
+        }
+
+  - id: http
+    label: Direct API tools
+    config:
+      url: http://localhost:3322/api/benchmark/run
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        approach: api
+        prompt: "{{prompt}}"
+        stream: false
+      transformResponse: |
+        {
+          output: json.output || "",
+          tokenUsage: json.tokenUsage,
+          metadata: {
+            approach: json.approach,
+            status: json.status,
+            metrics: json.metrics,
+            traces: json.traces
+          }
+        }
+
+  - id: http
+    label: MCP tools
+    config:
+      url: http://localhost:3322/api/benchmark/run
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        approach: mcp
+        prompt: "{{prompt}}"
+        stream: false
+      transformResponse: |
+        {
+          output: json.output || "",
+          tokenUsage: json.tokenUsage,
+          metadata: {
+            approach: json.approach,
+            status: json.status,
+            metrics: json.metrics,
+            traces: json.traces
+          }
+        }
+
+defaultTest:
+  options:
+    runSerially: true
+  assert:
+    - type: not-icontains
+      value: no response
+    - type: not-icontains
+      value: couldn't determine
+    - type: not-icontains
+      value: unable to determine
+    - type: not-icontains
+      value: do not have access
+    - type: llm-rubric
+      value: >
+        Grade the answer against this PostHog source of truth:
+
+        {{source_truth}}
+
+        Pass if the answer addresses the task and its important counts, rankings,
+        event names, and URLs match the source truth. Allow concise wording
+        differences and minor formatting differences. Fail if important numeric
+        claims contradict the source truth, the answer refuses despite available
+        data, or the answer is just a tool-use disclaimer.
+
+tests:
+  - description: Marketing blog top pages
+    vars:
+      prompt: >
+        Using PostHog, find the top-performing marketing blog URLs by pageviews
+        for April 6, 2026 through May 6, 2026. Return the ranked URLs,
+        pageview counts, and the event/property used.
+      source_truth: |
+        Ground truth from PostHog pageview data for the same date window:
+        - Event: $pageview
+        - Property: properties.$current_url
+        - URL filter: contains /blog, including /blog/ and /blogs/
+        - #1 https://www.spreadsheetagent.com/blogs/gemini-google-sheets-ai-features = 79 pageviews
+        - #2 https://www.spreadsheetagent.com/blogs/facebook-marketplace-ai-upload-automation = 53 pageviews
+        - #3 https://www.spreadsheetagent.com/blogs/convert-pdf-to-spreadsheet-ai = 25 pageviews
+        - #4 https://www.spreadsheetagent.com/blog/job-application-tracker-google-sheets = 10 pageviews
+        - #5 https://www.spreadsheetagent.com/blogs/automate-manual-data-entry-spreadsheets = 9 pageviews
+        - #6 https://www.spreadsheetagent.com/blog/upload-files-images-google-sheets-folders = 9 pageviews
+        - #7 https://www.spreadsheetagent.com/blog/expense-tracking-spreadsheet-small-business = 8 pageviews
+        - #8 https://www.spreadsheetagent.com/blog/convert-pdf-to-google-sheets = 8 pageviews
+
+  - description: Marketing top pages
+    vars:
+      prompt: >
+        Using PostHog, identify the top pages or URLs by pageviews for
+        April 6, 2026 through May 6, 2026. Return a ranked list with counts.
+      source_truth: |
+        Ground truth from PostHog $pageview data for the same date window:
+        - #1 / = 208 pageviews
+        - #2 /blogs/gemini-google-sheets-ai-features = 81 pageviews
+        - #3 /blogs/facebook-marketplace-ai-upload-automation = 55 pageviews
+        - #4 /login = 53 pageviews
+        - #5 /checkout = 33 pageviews
+        - #6 /blogs/convert-pdf-to-spreadsheet-ai = 25 pageviews
+        - #7 /blog/job-application-tracker-google-sheets = 10 pageviews
+        - #8 /setup-guide = 9 pageviews
+
+  - description: App custom events
+    vars:
+      prompt: >
+        Using PostHog, find the top app-specific or custom events for
+        April 6, 2026 through May 6, 2026, excluding generic pageview and
+        autocapture-style events. Include event names and counts.
+      source_truth: |
+        Ground truth from PostHog event data for the same date window, excluding
+        $pageview, $autocapture, $pageleave, $identify, $set,
+        $feature_flag_called, and $web_vitals:
+        - $exception = 4 events
+        - $rageclick = 3 events
+        - agent_created = 1 event
+
+  - description: Activation event count
+    vars:
+      prompt: >
+        Using PostHog, summarize signup, activation, and agent/workflow events
+        for April 6, 2026 through May 6, 2026. Return event counts and unique
+        people where available.
+      source_truth: |
+        Ground truth from PostHog event data for the same date window:
+        - Matching signup/activation/agent/workflow event found: agent_created
+        - agent_created = 1 event
+        - agent_created unique people = 1

@@ -1,0 +1,105 @@
+description: PostHog integration benchmark - CLI string tool vs direct API tools vs MCP tools
+
+prompts:
+  - "{{prompt}}"
+
+providers:
+  - id: http
+    label: CLI string tool
+    config:
+      url: http://localhost:3322/api/benchmark/run
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        approach: cli
+        prompt: "{{prompt}}"
+        stream: false
+      transformResponse: |
+        {
+          output: json.output || "",
+          tokenUsage: json.tokenUsage,
+          metadata: {
+            approach: json.approach,
+            status: json.status,
+            metrics: json.metrics,
+            traces: json.traces
+          }
+        }
+
+  - id: http
+    label: Direct API tools
+    config:
+      url: http://localhost:3322/api/benchmark/run
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        approach: api
+        prompt: "{{prompt}}"
+        stream: false
+      transformResponse: |
+        {
+          output: json.output || "",
+          tokenUsage: json.tokenUsage,
+          metadata: {
+            approach: json.approach,
+            status: json.status,
+            metrics: json.metrics,
+            traces: json.traces
+          }
+        }
+
+  - id: http
+    label: MCP tools
+    config:
+      url: http://localhost:3322/api/benchmark/run
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        approach: mcp
+        prompt: "{{prompt}}"
+        stream: false
+      transformResponse: |
+        {
+          output: json.output || "",
+          tokenUsage: json.tokenUsage,
+          metadata: {
+            approach: json.approach,
+            status: json.status,
+            metrics: json.metrics,
+            traces: json.traces
+          }
+        }
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: "output && output.trim().length > 0"
+
+tests:
+  - description: Project context
+    vars:
+      prompt: Find the current PostHog project or environment context, then summarize what data is available for analysis.
+    metadata:
+      prompt_id: project-context
+      scope: read-only
+  - description: Recent events
+    vars:
+      prompt: Use PostHog to identify recent event names or event-like data sources and explain which look useful for a product analytics demo.
+    metadata:
+      prompt_id: recent-events
+      scope: read-only
+  - description: Insights and dashboards
+    vars:
+      prompt: List the available insights and dashboards, then recommend one follow-up analytics question for a blog-post comparison.
+    metadata:
+      prompt_id: insights-dashboards
+      scope: read-only
+  - description: HogQL question
+    vars:
+      prompt: Run a small read-only HogQL query that helps understand product activity, and explain the result in two concise bullets.
+    metadata:
+      prompt_id: hogql-question
+      scope: read-only

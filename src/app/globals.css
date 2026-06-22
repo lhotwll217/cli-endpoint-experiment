@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f8fb;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #18181b;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f4;
+  --secondary-foreground: #27272a;
+  --muted: #eef0f4;
+  --muted-foreground: #62646d;
+  --destructive: #c2410c;
+  --destructive-foreground: #ffffff;
+  --border: #d9dde5;
+  --input: #cdd3dd;
+  --ring: #2563eb;
+  --radius: 0.5rem;
+  --approach-cli: #0f766e;
+  --approach-cli-soft: #ccfbf1;
+  --approach-api: #2563eb;
+  --approach-api-soft: #dbeafe;
+  --approach-mcp: #9333ea;
+  --approach-mcp-soft: #f3e8ff;
+  --status-idle: #6b7280;
+  --status-running: #2563eb;
+  --status-succeeded: #15803d;
+  --status-failed: #b91c1c;
+  --status-cancelled: #a16207;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--ring) 18%, transparent);
+}
+
+.presentation-mode {
+  --background: #ffffff;
+}
