@@ -1,12 +1,71 @@
-# PostHog Integration Benchmark Demo
+# CLI Endpoint Experiment
 
-Next.js demo app for comparing three PostHog agent integration approaches:
+This repo explores a specific agent-integration question:
 
-- CLI: one string-only `posthog-cli` tool exposed through `/api/cli`.
-- API: typed read-only tools backed by the PostHog API.
-- MCP: read-only tools discovered from a PostHog MCP server.
+> What would it look like to expose an existing CLI as a simple HTTP-streamable
+> agent tool, and how does that compare with MCP and hand-written API tools?
 
-The dashboard can run one approach or all three in parallel, then displays real model token usage, latency, tool-call count, output bytes, and curated LOC values for blog/video reporting.
+The experiment uses PostHog as the real integration target because it has all
+three surfaces worth comparing:
+
+- A CLI: `posthog-cli`
+- A direct HTTP API
+- An MCP server
+
+The goal is not to build the best PostHog client. The goal is to compare the
+ergonomics and runtime cost of three ways to give an agent access to the same
+product data.
+
+## What Is Being Compared?
+
+### CLI Endpoint
+
+The CLI approach exposes one narrow tool to the agent:
+
+```ts
+posthog_cli({ command: string })
+```
+
+That tool calls an internal HTTP endpoint, `POST /api/cli`, which validates a
+single `posthog-cli ...` invocation, parses it into argv, spawns the CLI without
+a shell, and streams stdout/stderr/exit data back to the agent.
+
+This is the core experiment: can an agent use a CLI through a minimal HTTP
+wrapper with progressive discovery, without needing a large typed integration
+layer?
+
+### Direct API Tools
+
+The API approach exposes hand-written typed tools backed by the PostHog API,
+such as project listing, insight/dashboard listing, and HogQL querying.
+
+This is the "custom integration" baseline. It should usually be efficient at
+runtime, but every useful capability has to be intentionally surfaced in code.
+
+### MCP Tools
+
+The MCP approach connects to the PostHog MCP server and exposes discovered
+read-only tools to the agent.
+
+This is the protocol/tooling baseline. It gives broad capability with less
+custom integration code, but the tool schemas and discovery surface can add
+prompt/token overhead.
+
+## What The App Measures
+
+The dashboard and eval scripts compare:
+
+- Prompt tokens, completion tokens, and total tokens
+- Latency
+- Tool-call count
+- Output size
+- Final success/failure status
+- Curated integration LOC for CLI/API/MCP
+- Tool traces, including command/tool inputs and compact results
+
+The UI is a chat-style benchmark surface: send one initial prompt to CLI, API,
+MCP, or all three; then inspect each approach in its own tab with metrics and
+tool traces.
 
 ## Setup
 
@@ -36,14 +95,31 @@ CLI mode uses the local `@posthog/cli` package when available and otherwise fall
 npm run dev
 npm run build
 npm run eval
-npm run eval -- --filter-first-n 1
-npm run eval -- --filter-providers posthog-agent:cli
-npm run eval -- --var prompt="Find recent useful PostHog events"
+npm run eval:realworld:smoke
+npm run eval:realworld
+npm run eval:stats
 npm run lint
 npm run test
 ```
 
-Evals use Promptfoo directly. Eval configs, helpers, Promptfoo state, and run artifacts all live under `evals/`. `npm run eval` writes reports to `evals/eval_runs/latest.json` and `evals/eval_runs/latest.html`; timestamped real-world runs go under `evals/eval_runs/<timestamp>_<label>/`.
+Evals use Promptfoo against the app HTTP endpoint, not a separate eval-only
+integration. Eval configs, Promptfoo state, and run artifacts all live under
+`evals/`.
+
+- `evals/posthog_smoke.yaml`: simple endpoint smoke suite.
+- `evals/posthog_realworld.yaml`: real PostHog task suite with source-of-truth
+  expectations in YAML.
+- `evals/eval_runs/`: local Promptfoo JSON/HTML/CSV reports and summarized
+  stats. This folder is ignored by git.
+
+The real-world suite runs the same prompt against the CLI, API, and MCP modes by
+posting to:
+
+```http
+POST http://localhost:3322/api/benchmark/run
+```
+
+with only the `approach` field changed.
 
 ## Architecture
 
@@ -54,3 +130,10 @@ Evals use Promptfoo directly. Eval configs, helpers, Promptfoo state, and run ar
 - `src/core/ports`: adapter contracts.
 - `src/infrastructure`: CLI, API, MCP, and AI SDK adapters.
 - `src/config`: tasks, LOC values, env parsing, and theme metadata.
+
+## Safety Notes
+
+The CLI wrapper intentionally does not execute a shell. It rejects empty
+commands, non-`posthog-cli` executables, shell operators, pipes, redirects,
+backticks, `$()`, `&&`, and `;`. It also enforces timeout/output caps and
+redacts common token/API-key patterns from CLI trace output.
