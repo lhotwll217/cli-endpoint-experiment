@@ -1,4 +1,4 @@
-export const APPROACHES = ["cli", "api", "mcp"] as const;
+export const APPROACHES = ["cli", "mcp"] as const;
 
 export type Approach = (typeof APPROACHES)[number];
 

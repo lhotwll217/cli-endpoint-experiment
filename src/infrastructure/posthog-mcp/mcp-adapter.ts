@@ -6,7 +6,6 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { JSONSchema7 } from "@ai-sdk/provider";
 import type { ServerEnv } from "@/config/env";
 import type { PostHogIntegrationAdapter, TraceRecorder } from "@/core/ports/posthog-integration";
-import { summarizeUnknown } from "@/infrastructure/posthog-api/posthog-api-client";
 
 type McpTool = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 
@@ -136,4 +135,9 @@ function compactMcpResult(result: unknown): unknown {
     return `${text.slice(0, 12_000)}...`;
   }
   return JSON.parse(JSON.stringify(result ?? null));
+}
+
+function summarizeUnknown(value: unknown, maxLength: number): string {
+  const text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }

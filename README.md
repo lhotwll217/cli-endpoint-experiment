@@ -58,10 +58,9 @@ a documented API), and the eval tasks run against real product analytics data.
 
 These two are the fair comparison because they are the same genus: general
 surfaces with runtime discovery. The CLI discovers via `--help` on demand;
-MCP preloads discovered tool schemas. A hand-written typed-tools arm still
-exists in the codebase (`approach: "api"` on the benchmark endpoint) but is
-excluded from the benchmark: it carries a small curated subset of capabilities,
-so token comparisons against a full discovered surface would confound leanness
+MCP preloads discovered tool schemas. An earlier hand-written typed-tools arm
+was removed: it carried a small curated subset of capabilities, so token
+comparisons against a full discovered surface would have confounded leanness
 with reduced capability breadth.
 
 ## The demo UI
@@ -86,10 +85,12 @@ Evals use Promptfoo against the app's own HTTP endpoint (`POST
   the rubric grades against auditable, reproducible data.
 - `evals/eval_runs/` — local Promptfoo reports and stats (gitignored).
 
-`npm run eval:realworld` repeats every task×arm 5 times; agents are
-stochastic, and single runs are anecdotes. `npm run eval:stats` then reports
-the headline number per arm: **cost of success** — median tokens, latency,
-and tool calls over passing runs only, plus per-task breakdowns.
+`npm run eval:realworld` runs each task once per arm by default; pass
+`-- --repeat N` to add repeats when recording final numbers (agents are
+stochastic, so repeats buy confidence at token cost). `npm run eval:stats`
+then reports the headline number per arm: **cost of success** — median
+tokens, latency, and tool calls over passing runs only, plus per-task
+breakdowns.
 
 Three of the tasks are designed to stress where the surfaces should diverge:
 a multi-step drill-down (find the top blog URL, then break it down by
@@ -114,8 +115,7 @@ Required for benchmark runs:
 - `OPENAI_REASONING_EFFORT`, defaults to `low`
 - `POSTHOG_PERSONAL_API_KEY`
 - `POSTHOG_PROJECT_ID`
-- `POSTHOG_ORGANIZATION_ID` for project listing
-- `POSTHOG_ENVIRONMENT_ID` for insights/dashboards, or it falls back to `POSTHOG_PROJECT_ID`
+- `POSTHOG_ENVIRONMENT_ID`, or it falls back to `POSTHOG_PROJECT_ID`
 
 CLI mode uses the installed `@posthog/cli` package from the app runtime
 (`node_modules/.bin/posthog-cli`) when available and only falls back to a
@@ -136,7 +136,7 @@ npm run dev
 npm run build
 npm run truth                 # regenerate evals/ground_truth from PostHog
 npm run eval                  # smoke suite
-npm run eval:realworld        # full suite, 5 repeats per task x arm
+npm run eval:realworld        # full suite (add -- --repeat N for repeats)
 npm run eval:realworld:smoke  # first task only, 1 repeat
 npm run eval:stats            # cost-of-success report for the latest run
 npm run lint
@@ -150,7 +150,7 @@ npm run test
 - `src/core/domain`: shared benchmark types.
 - `src/core/application`: orchestration and metrics helpers.
 - `src/core/ports`: adapter contracts.
-- `src/infrastructure`: CLI, API, MCP, and AI SDK adapters.
+- `src/infrastructure`: CLI, MCP, and AI SDK adapters.
 - `src/config`: env parsing and theme metadata.
 
 ## Safety notes

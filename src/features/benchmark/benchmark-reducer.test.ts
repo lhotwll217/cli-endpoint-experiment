@@ -48,16 +48,15 @@ describe("benchmarkReducer", () => {
       type: "event",
       event: {
         type: "failed",
-        approach: "api",
+        approach: "mcp",
         completedAt: "2026-05-01T00:00:00.000Z",
         error: "missing key",
-        metrics: createInitialBenchmarkState("prompt").api.metrics,
+        metrics: createInitialBenchmarkState("prompt").mcp.metrics,
         traces: [],
       },
     });
 
-    expect(state.api.status).toBe("failed");
+    expect(state.mcp.status).toBe("failed");
     expect(state.cli.status).toBe("idle");
-    expect(state.mcp.status).toBe("idle");
   });
 });

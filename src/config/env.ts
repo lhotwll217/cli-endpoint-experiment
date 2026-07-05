@@ -28,7 +28,6 @@ export type ServerEnv = {
   posthogPersonalApiKey?: string;
   posthogProjectId?: string;
   posthogEnvironmentId?: string;
-  posthogOrganizationId?: string;
   posthogCliTimeoutMs: number;
   posthogCliOutputLimitBytes: number;
   posthogMcpUrl: string;
@@ -50,7 +49,6 @@ export function getServerEnv(): ServerEnv {
     posthogPersonalApiKey: personalApiKey,
     posthogProjectId: optionalEnv("POSTHOG_PROJECT_ID"),
     posthogEnvironmentId: optionalEnv("POSTHOG_ENVIRONMENT_ID") ?? optionalEnv("POSTHOG_PROJECT_ID"),
-    posthogOrganizationId: optionalEnv("POSTHOG_ORGANIZATION_ID"),
     posthogCliTimeoutMs: Number(optionalEnv("POSTHOG_CLI_TIMEOUT_MS") ?? 30_000),
     posthogCliOutputLimitBytes: Number(optionalEnv("POSTHOG_CLI_OUTPUT_LIMIT_BYTES") ?? 120_000),
     posthogMcpUrl: optionalEnv("POSTHOG_MCP_URL") ?? "https://mcp.posthog.com/mcp",
