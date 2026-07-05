@@ -1,36 +1,33 @@
-# CLI Endpoint Experiment
+# HTTP CLI: giving a remote server the ergonomics of a CLI
 
-This repo explores a specific agent-integration question:
+Agents are unusually good at driving CLIs: one string in, text out, and the
+whole capability surface is discoverable progressively through `--help`. But a
+CLI is a local artifact — it needs a binary installed, versioned, and
+sandboxed next to the agent. MCP was designed for the remote case, and it pays
+for that with tool-schema and discovery overhead in the prompt.
 
-> What would it look like to expose an existing CLI as a simple HTTP-streamable
-> agent tool, and how does that compare with MCP and hand-written API tools?
+This repo explores the middle:
 
-The experiment uses PostHog as the real integration target because it has all
-three surfaces worth comparing:
+> What if a remote server exposed a CLI-designed interface over plain HTTP —
+> one endpoint, one command string — so an agent gets CLI ergonomics without a
+> local binary?
 
-- A CLI: `posthog-cli`
-- A direct HTTP API
-- An MCP server
+Per-capability authoring has to happen somewhere no matter what; for a CLI it
+already happened when the CLI was written. The pattern here is about
+**deployment and integration simplicity**: what the endpoint looks like, and
+how an agent behaves when it drives one.
 
-The goal is not to build the best PostHog client. The goal is to compare the
-ergonomics and runtime cost of three ways to give an agent access to the same
-product data.
+## The endpoint
 
-## What Is Being Compared?
-
-### CLI Endpoint
-
-The CLI approach exposes one narrow tool to the agent:
+The agent gets a single tool:
 
 ```ts
 posthog_cli({ command: string })
 ```
 
-That tool calls an internal HTTP endpoint, `POST /api/cli`, which validates a
-single `posthog-cli ...` invocation, parses it into argv, spawns the CLI without
-a shell, and streams stdout/stderr/exit data back to the agent.
-
-For example, the agent can discover the CLI surface through the endpoint first:
+It calls one internal endpoint, `POST /api/cli`, which validates a single
+`posthog-cli ...` invocation, parses it into argv, executes it without a
+shell, and streams stdout/stderr/exit data back:
 
 ```bash
 curl -N http://localhost:3322/api/cli \
@@ -38,48 +35,65 @@ curl -N http://localhost:3322/api/cli \
   -d '{"command":"posthog-cli --help"}'
 ```
 
-That single call gives the agent the same starting point a human gets in a
+That first call gives the agent the same starting point a human gets in a
 terminal: available commands, options, and follow-up help paths such as
-`posthog-cli exp --help` or `posthog-cli exp query run --help`. The experiment is
-whether this progressive discovery is enough for useful agent workflows without
-pre-modeling every API capability as a typed tool.
+`posthog-cli exp --help` or `posthog-cli exp query run --help`. No capability
+is pre-modeled as a typed tool; the agent discovers what it needs.
 
-This is the core experiment: can an agent use a CLI through a minimal HTTP
-wrapper with progressive discovery, without needing a large typed integration
-layer?
+In this experiment the endpoint wraps the actual `posthog-cli` binary, because
+the binary already exists and keeps the experiment faithful. That is an
+implementation detail the agent cannot observe: a production server would
+implement the same command grammar directly against its real API, and nothing
+about the interface — or this benchmark — would change.
 
-### Direct API Tools
+## The comparison
 
-The API approach exposes hand-written typed tools backed by the PostHog API,
-such as project listing, insight/dashboard listing, and HogQL querying.
+The demo races the same prompt across two surfaces, side by side:
 
-This is the "custom integration" baseline. It should usually be efficient at
-runtime, but every useful capability has to be intentionally surfaced in code.
+- **HTTP CLI** — the one-string-tool endpoint described above.
+- **MCP** — the PostHog MCP server's discovered read-only tools.
 
-### MCP Tools
+PostHog is the integration target because it genuinely has both surfaces (plus
+a documented API), and the eval tasks run against real product analytics data.
 
-The MCP approach connects to the PostHog MCP server and exposes discovered
-read-only tools to the agent.
+A third arm — hand-written typed API tools — stays in the eval suite as the
+efficiency control. Typed tools are the runtime-efficiency ceiling: small
+schemas, no discovery round-trips. They're excluded from the demo UI because
+the demo's question is two-way, but any "the CLI surface gets close to the
+ceiling" claim needs the ceiling measured.
 
-This is the protocol/tooling baseline. It gives broad capability with less
-custom integration code, but the tool schemas and discovery surface can add
-prompt/token overhead.
+## The demo UI
 
-## What The App Measures
+One prompt box fans out to two chat panes (HTTP CLI left, MCP right) streaming
+simultaneously. Each pane shows a live strip of tokens, tool calls, and
+elapsed time, and every tool call renders as a collapsible card in the
+conversation — collapsed it's the command/tool name with duration and output
+size, expanded it's the full input and output. Watching the two discovery
+styles diverge on the same prompt is the point.
 
-The dashboard and eval scripts compare:
+## Evals
 
-- Prompt tokens, completion tokens, and total tokens
-- Latency
-- Tool-call count
-- Output size
-- Final success/failure status
-- Curated integration LOC for CLI/API/MCP
-- Tool traces, including command/tool inputs and compact results
+Evals use Promptfoo against the app's own HTTP endpoint (`POST
+/api/benchmark/run`), not a separate eval-only integration, with only the
+`approach` field changed per arm.
 
-The UI is a chat-style benchmark surface: send one initial prompt to CLI, API,
-MCP, or all three; then inspect each approach in its own tab with metrics and
-tool traces.
+- `evals/posthog_smoke.yaml` — simple endpoint smoke suite.
+- `evals/posthog_realworld.yaml` — real PostHog task suite. Each task's
+  expected numbers live in `evals/ground_truth/*.md`, regenerated straight
+  from PostHog by `npm run truth` (`scripts/generate-ground-truth.mjs`), so
+  the rubric grades against auditable, reproducible data.
+- `evals/eval_runs/` — local Promptfoo reports and stats (gitignored).
+
+`npm run eval:realworld` repeats every task×arm 5 times; agents are
+stochastic, and single runs are anecdotes. `npm run eval:stats` then reports
+the headline number per arm: **cost of success** — median tokens, latency,
+and tool calls over passing runs only, plus per-task breakdowns.
+
+Three of the tasks are designed to stress where the surfaces should diverge:
+a multi-step drill-down (find the top blog URL, then break it down by
+device), a weekly trend (date bucketing), and a full page inventory (larger
+result sets). Their ground-truth files ship as `GROUND TRUTH PENDING` —
+run `npm run truth` once with PostHog credentials before benchmarking them.
 
 ## Setup
 
@@ -104,59 +118,40 @@ Required for benchmark runs:
 CLI mode uses the installed `@posthog/cli` package from the app runtime
 (`node_modules/.bin/posthog-cli`) when available and only falls back to a
 `posthog-cli` binary on the server PATH if the local package is missing. MCP
-mode runs through the installed `@modelcontextprotocol/sdk` package in the app's
-Node runtime, defaults to `https://mcp.posthog.com/mcp`, and uses
+mode runs through the installed `@modelcontextprotocol/sdk` package in the
+app's Node runtime, defaults to `https://mcp.posthog.com/mcp`, and uses
 `POSTHOG_MCP_AUTH_HEADER` when set, otherwise
 `Bearer ${POSTHOG_PERSONAL_API_KEY}`.
 
-The CLI and MCP packages intentionally use normal semver ranges so fresh installs
-can pick up current CLI/MCP behavior. Run `npm update @posthog/cli
-@modelcontextprotocol/sdk mcp-remote` before recording or rerunning the benchmark
-if you want the latest available versions in the lockfile.
+The CLI and MCP packages intentionally use normal semver ranges so fresh
+installs pick up current behavior. Run `npm update @posthog/cli
+@modelcontextprotocol/sdk mcp-remote` before recording benchmark numbers.
 
 ## Scripts
 
 ```bash
 npm run dev
 npm run build
-npm run eval
-npm run eval:realworld:smoke
-npm run eval:realworld
-npm run eval:stats
+npm run truth                 # regenerate evals/ground_truth from PostHog
+npm run eval                  # smoke suite
+npm run eval:realworld        # full suite, 5 repeats per task x arm
+npm run eval:realworld:smoke  # first task only, 1 repeat
+npm run eval:stats            # cost-of-success report for the latest run
 npm run lint
 npm run test
 ```
 
-Evals use Promptfoo against the app HTTP endpoint, not a separate eval-only
-integration. Eval configs, Promptfoo state, and run artifacts all live under
-`evals/`.
-
-- `evals/posthog_smoke.yaml`: simple endpoint smoke suite.
-- `evals/posthog_realworld.yaml`: real PostHog task suite with source-of-truth
-  expectations in YAML.
-- `evals/eval_runs/`: local Promptfoo JSON/HTML/CSV reports and summarized
-  stats. This folder is ignored by git.
-
-The real-world suite runs the same prompt against the CLI, API, and MCP modes by
-posting to:
-
-```http
-POST http://localhost:3322/api/benchmark/run
-```
-
-with only the `approach` field changed.
-
 ## Architecture
 
 - `src/app`: Next routes and pages.
-- `src/features/benchmark`: dashboard, reducer, streaming client.
+- `src/features/benchmark`: race dashboard, reducer, streaming client.
 - `src/core/domain`: shared benchmark types.
 - `src/core/application`: orchestration and metrics helpers.
 - `src/core/ports`: adapter contracts.
 - `src/infrastructure`: CLI, API, MCP, and AI SDK adapters.
-- `src/config`: tasks, LOC values, env parsing, and theme metadata.
+- `src/config`: env parsing and theme metadata.
 
-## Safety Notes
+## Safety notes
 
 The CLI wrapper intentionally does not execute a shell. It rejects empty
 commands, non-`posthog-cli` executables, shell operators, pipes, redirects,
