@@ -12,14 +12,18 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const truthDir = join(repoRoot, "evals", "ground_truth");
 
-const WINDOW = { from: "2026-04-06", to: "2026-05-06" };
-const WINDOW_FILTER = `event = '$pageview' AND toDate(timestamp) >= toDate('${WINDOW.from}') AND toDate(timestamp) <= toDate('${WINDOW.to}')`;
-const DATE_FILTER = `toDate(timestamp) >= toDate('${WINDOW.from}') AND toDate(timestamp) <= toDate('${WINDOW.to}')`;
-const GENERIC_EVENTS = "'$pageview','$autocapture','$pageleave','$identify','$set','$feature_flag_called','$web_vitals'";
+// Fixed, fully-elapsed windows so regeneration is deterministic.
+const PAGEVIEW_WINDOW = { from: "2026-04-06", to: "2026-05-06" };
+const PRODUCT_WINDOW = { from: "2026-06-15", to: "2026-07-04" };
+const ADS_WINDOW = { from: "2026-06-01", to: "2026-06-30" };
+
+const pageviewFilter = `event = '$pageview' AND toDate(timestamp) >= toDate('${PAGEVIEW_WINDOW.from}') AND toDate(timestamp) <= toDate('${PAGEVIEW_WINDOW.to}')`;
+const productDateFilter = `toDate(timestamp) >= toDate('${PRODUCT_WINDOW.from}') AND toDate(timestamp) <= toDate('${PRODUCT_WINDOW.to}')`;
+const adsDateFilter = `toDate(segments_date) >= toDate('${ADS_WINDOW.from}') AND toDate(segments_date) <= toDate('${ADS_WINDOW.to}')`;
 const TOP_BLOG_URL_SUBQUERY = `(
       SELECT properties.$current_url
       FROM events
-      WHERE ${WINDOW_FILTER} AND (properties.$current_url LIKE '%/blog/%' OR properties.$current_url LIKE '%/blogs/%')
+      WHERE ${pageviewFilter} AND (properties.$current_url LIKE '%/blog/%' OR properties.$current_url LIKE '%/blogs/%')
       GROUP BY properties.$current_url
       ORDER BY count() DESC
       LIMIT 1
@@ -27,27 +31,8 @@ const TOP_BLOG_URL_SUBQUERY = `(
 
 const TASKS = [
   {
-    id: "marketing-blog-top-pages",
-    intro: [
-      "Ground truth from PostHog pageview data for the same date window:",
-      "- Event: $pageview",
-      "- Property: properties.$current_url",
-      "- URL filter: contains /blog/ or /blogs/",
-    ],
-    queries: [
-      {
-        label: "Blog URLs ranked by pageviews",
-        format: (rows) => rows.map(([url, count], i) => `- #${i + 1} ${url} = ${count} pageviews`),
-        hogql: `
-          SELECT properties.$current_url AS url, count() AS pageviews
-          FROM events
-          WHERE ${WINDOW_FILTER} AND (properties.$current_url LIKE '%/blog/%' OR properties.$current_url LIKE '%/blogs/%')
-          GROUP BY url ORDER BY pageviews DESC, url ASC LIMIT 20`,
-      },
-    ],
-  },
-  {
     id: "marketing-top-pages",
+    window: PAGEVIEW_WINDOW,
     intro: ["Ground truth from PostHog $pageview data for the same date window:"],
     queries: [
       {
@@ -56,52 +41,14 @@ const TASKS = [
         hogql: `
           SELECT properties.$pathname AS path, count() AS pageviews
           FROM events
-          WHERE ${WINDOW_FILTER}
+          WHERE ${pageviewFilter}
           GROUP BY path ORDER BY pageviews DESC, path ASC LIMIT 20`,
       },
     ],
   },
   {
-    id: "app-custom-events",
-    intro: [
-      "Ground truth from PostHog event data for the same date window, excluding",
-      `${GENERIC_EVENTS.replaceAll("'", "")}:`,
-    ],
-    queries: [
-      {
-        label: "Non-generic events with counts",
-        format: (rows) => rows.map(([event, count]) => `- ${event} = ${count} events`),
-        hogql: `
-          SELECT event, count() AS total
-          FROM events
-          WHERE ${DATE_FILTER} AND event NOT IN (${GENERIC_EVENTS})
-          GROUP BY event ORDER BY total DESC, event ASC LIMIT 50`,
-      },
-    ],
-  },
-  {
-    id: "activation-event-count",
-    intro: ["Ground truth from PostHog event data for the same date window:"],
-    queries: [
-      {
-        label: "Signup/activation/agent/workflow events",
-        format: (rows) =>
-          rows.length === 0
-            ? ["- No matching signup/activation/agent/workflow events found."]
-            : rows.map(([event, count, people]) => `- ${event} = ${count} events, ${people} unique people`),
-        hogql: `
-          SELECT event, count() AS total, count(DISTINCT person_id) AS unique_people
-          FROM events
-          WHERE ${DATE_FILTER} AND (
-            event ILIKE '%signup%' OR event ILIKE '%sign_up%' OR event ILIKE '%activation%'
-            OR event ILIKE '%agent%' OR event ILIKE '%workflow%'
-          )
-          GROUP BY event ORDER BY total DESC, event ASC LIMIT 50`,
-      },
-    ],
-  },
-  {
     id: "blog-device-drilldown",
+    window: PAGEVIEW_WINDOW,
     intro: ["Ground truth from PostHog pageview data for the same date window:"],
     queries: [
       {
@@ -110,7 +57,7 @@ const TASKS = [
         hogql: `
           SELECT properties.$current_url AS url, count() AS pageviews
           FROM events
-          WHERE ${WINDOW_FILTER} AND (properties.$current_url LIKE '%/blog/%' OR properties.$current_url LIKE '%/blogs/%')
+          WHERE ${pageviewFilter} AND (properties.$current_url LIKE '%/blog/%' OR properties.$current_url LIKE '%/blogs/%')
           GROUP BY url ORDER BY pageviews DESC, url ASC LIMIT 1`,
       },
       {
@@ -119,37 +66,14 @@ const TASKS = [
         hogql: `
           SELECT properties.$device_type AS device_type, count() AS pageviews
           FROM events
-          WHERE ${WINDOW_FILTER} AND properties.$current_url = ${TOP_BLOG_URL_SUBQUERY}
+          WHERE ${pageviewFilter} AND properties.$current_url = ${TOP_BLOG_URL_SUBQUERY}
           GROUP BY device_type ORDER BY pageviews DESC`,
       },
     ],
   },
   {
-    id: "weekly-pageview-trend",
-    intro: ["Ground truth from PostHog $pageview data, weeks starting Monday:"],
-    queries: [
-      {
-        label: "Weekly pageview totals",
-        format: (rows) => {
-          const lines = rows.map(([week, count]) => `- week of ${String(week).slice(0, 10)} = ${count} pageviews`);
-          if (rows.length >= 2) {
-            const first = Number(rows[0][1]);
-            const last = Number(rows[rows.length - 1][1]);
-            const direction = last > first * 1.1 ? "up" : last < first * 0.9 ? "down" : "roughly flat";
-            lines.push(`- Trend from first to last week: ${direction}`);
-          }
-          return lines;
-        },
-        hogql: `
-          SELECT toStartOfWeek(timestamp, 1) AS week, count() AS pageviews
-          FROM events
-          WHERE ${WINDOW_FILTER}
-          GROUP BY week ORDER BY week ASC`,
-      },
-    ],
-  },
-  {
     id: "all-pages-inventory",
+    window: PAGEVIEW_WINDOW,
     intro: ["Ground truth from PostHog $pageview data — every distinct page path with counts:"],
     queries: [
       {
@@ -161,8 +85,139 @@ const TASKS = [
         hogql: `
           SELECT properties.$pathname AS path, count() AS pageviews
           FROM events
-          WHERE ${WINDOW_FILTER}
+          WHERE ${pageviewFilter}
           GROUP BY path ORDER BY pageviews DESC, path ASC LIMIT 200`,
+      },
+    ],
+  },
+  {
+    id: "product-usage-events",
+    window: PRODUCT_WINDOW,
+    intro: [
+      "Ground truth from PostHog event data for the same date window.",
+      "Extract-to-sheet product usage events with counts and unique people:",
+    ],
+    queries: [
+      {
+        label: "Product usage events",
+        format: (rows) =>
+          rows.map(([event, count, people]) => `- ${event} = ${count} events, ${people} unique people`),
+        hogql: `
+          SELECT event, count() AS total, count(DISTINCT person_id) AS unique_people
+          FROM events
+          WHERE ${productDateFilter} AND event IN (
+            'extraction_started','extraction_completed',
+            'sheet_insert_started','sheet_insert_completed',
+            'credits_used','auth_signed_in',
+            'checkout_started','checkout_session_started','checkout_session_created','checkout_redirected'
+          )
+          GROUP BY event ORDER BY total DESC, event ASC`,
+      },
+    ],
+  },
+  {
+    id: "oauth-token-pipeline",
+    window: PRODUCT_WINDOW,
+    intro: [
+      "Ground truth from PostHog event data for the same date window.",
+      "Google OAuth token pipeline event counts:",
+    ],
+    queries: [
+      {
+        label: "google_oauth_tokens_* events",
+        format: (rows) => {
+          const lines = rows.map(([event, count]) => `- ${event} = ${count} events`);
+          const byName = Object.fromEntries(rows.map(([event, count]) => [event, Number(count)]));
+          const stored = byName.google_oauth_tokens_stored ?? 0;
+          const started = byName.google_oauth_tokens_store_started ?? 0;
+          if (stored > started) {
+            lines.push(
+              `- Notable: tokens_stored (${stored}) far exceeds store_started (${started}), so most stores happen outside the started/completed instrumentation.`,
+            );
+          }
+          return lines;
+        },
+        hogql: `
+          SELECT event, count() AS total
+          FROM events
+          WHERE ${productDateFilter} AND event LIKE 'google_oauth_tokens%'
+          GROUP BY event ORDER BY total DESC, event ASC`,
+      },
+    ],
+  },
+  {
+    id: "trial-credits-batch-health",
+    window: PRODUCT_WINDOW,
+    intro: [
+      "Ground truth from PostHog event data for the same date window.",
+      "Trial credits batch job health:",
+    ],
+    queries: [
+      {
+        label: "Batch and grant event counts",
+        format: (rows) => rows.map(([event, count, days]) => `- ${event} = ${count} events across ${days} distinct days`),
+        hogql: `
+          SELECT event, count() AS total, count(DISTINCT toDate(timestamp)) AS active_days
+          FROM events
+          WHERE ${productDateFilter} AND (event LIKE 'trial_credits%')
+          GROUP BY event ORDER BY total DESC, event ASC`,
+      },
+    ],
+  },
+  {
+    id: "ads-campaign-overview",
+    window: ADS_WINDOW,
+    intro: [
+      "Ground truth from the Google Ads data warehouse table",
+      "google_adsgoogleads_campaign_stats for the same date window",
+      "(cost = metrics_cost_micros / 1,000,000; CTR = clicks / impressions):",
+    ],
+    queries: [
+      {
+        label: "Campaign totals for the window",
+        format: (rows) =>
+          rows.map(
+            ([name, clicks, impressions, cost, ctr]) =>
+              `- ${name}: ${clicks} clicks, ${impressions} impressions, $${cost} spend, ${ctr}% CTR`,
+          ),
+        hogql: `
+          SELECT campaign_name,
+                 sum(metrics_clicks) AS clicks,
+                 sum(metrics_impressions) AS impressions,
+                 round(sum(metrics_cost_micros) / 1000000, 2) AS cost,
+                 round(sum(metrics_clicks) / sum(metrics_impressions) * 100, 2) AS ctr
+          FROM google_adsgoogleads_campaign_stats
+          WHERE ${adsDateFilter}
+          GROUP BY campaign_name ORDER BY clicks DESC`,
+      },
+    ],
+  },
+  {
+    id: "ads-clicks-vs-pageviews-weekly",
+    window: ADS_WINDOW,
+    intro: [
+      "Ground truth comparing weekly Google Ads clicks (warehouse table",
+      "google_adsgoogleads_campaign_stats) with weekly website $pageview events,",
+      "weeks starting Monday, for the same date window:",
+    ],
+    queries: [
+      {
+        label: "Weekly ads clicks",
+        format: (rows) => rows.map(([week, clicks]) => `- ads clicks, week of ${String(week).slice(0, 10)} = ${clicks}`),
+        hogql: `
+          SELECT toStartOfWeek(toDate(segments_date), 1) AS week, sum(metrics_clicks) AS clicks
+          FROM google_adsgoogleads_campaign_stats
+          WHERE ${adsDateFilter}
+          GROUP BY week ORDER BY week ASC`,
+      },
+      {
+        label: "Weekly pageviews",
+        format: (rows) => rows.map(([week, count]) => `- pageviews, week of ${String(week).slice(0, 10)} = ${count}`),
+        hogql: `
+          SELECT toStartOfWeek(timestamp, 1) AS week, count() AS pageviews
+          FROM events
+          WHERE event = '$pageview' AND toDate(timestamp) >= toDate('${ADS_WINDOW.from}') AND toDate(timestamp) <= toDate('${ADS_WINDOW.to}')
+          GROUP BY week ORDER BY week ASC`,
       },
     ],
   },
@@ -199,7 +254,7 @@ for (const task of selected) {
 
   const content = [
     `<!-- Generated by scripts/generate-ground-truth.mjs at ${new Date().toISOString()} -->`,
-    `<!-- Window: ${WINDOW.from} .. ${WINDOW.to} | Host: ${host} | Environment: ${environmentId} -->`,
+    `<!-- Window: ${task.window.from} .. ${task.window.to} | Host: ${host} | Environment: ${environmentId} -->`,
     ...task.queries.map((query) => `<!-- Query (${query.label}): ${query.hogql.replace(/\s+/g, " ").trim()} -->`),
     ...task.intro,
     ...sections,
