@@ -56,11 +56,13 @@ The demo races the same prompt across two surfaces, side by side:
 PostHog is the integration target because it genuinely has both surfaces (plus
 a documented API), and the eval tasks run against real product analytics data.
 
-A third arm — hand-written typed API tools — stays in the eval suite as the
-efficiency control. Typed tools are the runtime-efficiency ceiling: small
-schemas, no discovery round-trips. They're excluded from the demo UI because
-the demo's question is two-way, but any "the CLI surface gets close to the
-ceiling" claim needs the ceiling measured.
+These two are the fair comparison because they are the same genus: general
+surfaces with runtime discovery. The CLI discovers via `--help` on demand;
+MCP preloads discovered tool schemas. A hand-written typed-tools arm still
+exists in the codebase (`approach: "api"` on the benchmark endpoint) but is
+excluded from the benchmark: it carries a small curated subset of capabilities,
+so token comparisons against a full discovered surface would confound leanness
+with reduced capability breadth.
 
 ## The demo UI
 
