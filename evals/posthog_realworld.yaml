@@ -28,29 +28,6 @@ providers:
         }
 
   - id: http
-    label: Direct API tools
-    config:
-      url: http://localhost:3322/api/benchmark/run
-      method: POST
-      headers:
-        Content-Type: application/json
-      body:
-        approach: api
-        prompt: "{{prompt}}"
-        stream: false
-      transformResponse: |
-        {
-          output: json.output || "",
-          tokenUsage: json.tokenUsage,
-          metadata: {
-            approach: json.approach,
-            status: json.status,
-            metrics: json.metrics,
-            traces: json.traces
-          }
-        }
-
-  - id: http
     label: MCP tools
     config:
       url: http://localhost:3322/api/benchmark/run
