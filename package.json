@@ -8,10 +8,11 @@
     "start": "next start -p 3322",
     "eval": "mkdir -p evals/eval_runs evals/.promptfoo-data && ENV_FILE_ARGS='' && if [ -f .env.local ]; then ENV_FILE_ARGS='--env-file .env.local'; fi && PROMPTFOO_CONFIG_DIR=evals/.promptfoo-data PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/posthog_smoke.yaml $ENV_FILE_ARGS --output evals/eval_runs/latest.json evals/eval_runs/latest.html --table --no-cache --no-share --max-concurrency 3",
     "eval:ci": "mkdir -p evals/eval_runs evals/.promptfoo-data && ENV_FILE_ARGS='' && if [ -f .env.local ]; then ENV_FILE_ARGS='--env-file .env.local'; fi && PROMPTFOO_CONFIG_DIR=evals/.promptfoo-data PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/posthog_smoke.yaml $ENV_FILE_ARGS --output evals/eval_runs/latest.json --no-table --no-cache --no-share --max-concurrency 3",
-    "eval:realworld": "node scripts/run-eval-suite.mjs --config evals/posthog_realworld.yaml --label realworld --max-concurrency 1 --grader openai:gpt-4.1-mini",
+    "eval:realworld": "node scripts/run-eval-suite.mjs --config evals/posthog_realworld.yaml --label realworld --repeat 5 --max-concurrency 1 --grader openai:gpt-4.1-mini",
     "eval:realworld:smoke": "node scripts/run-eval-suite.mjs --config evals/posthog_realworld.yaml --label realworld-smoke --filter-first-n 1 --max-concurrency 1 --grader openai:gpt-4.1-mini",
-    "eval:realworld:ci": "node scripts/run-eval-suite.mjs --config evals/posthog_realworld.yaml --label realworld --max-concurrency 1 --grader openai:gpt-4.1-mini",
+    "eval:realworld:ci": "node scripts/run-eval-suite.mjs --config evals/posthog_realworld.yaml --label realworld --repeat 5 --max-concurrency 1 --grader openai:gpt-4.1-mini",
     "eval:stats": "node scripts/generate-eval-stats.mjs --stats",
+    "truth": "node scripts/generate-ground-truth.mjs",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest"

@@ -73,29 +73,30 @@ providers:
           }
         }
 
+# Ground truth lives in evals/ground_truth/*.md, regenerated from PostHog by
+# `npm run truth` (scripts/generate-ground-truth.mjs), so every number below
+# is auditable and reproducible.
 defaultTest:
   options:
     runSerially: true
   assert:
-    - type: not-icontains
-      value: no response
-    - type: not-icontains
-      value: couldn't determine
-    - type: not-icontains
-      value: unable to determine
-    - type: not-icontains
-      value: do not have access
     - type: llm-rubric
       value: >
         Grade the answer against this PostHog source of truth:
 
         {{source_truth}}
 
-        Pass if the answer addresses the task and its important counts, rankings,
-        event names, and URLs match the source truth. Allow concise wording
-        differences and minor formatting differences. Fail if important numeric
-        claims contradict the source truth, the answer refuses despite available
-        data, or the answer is just a tool-use disclaimer.
+        Fail immediately if the source of truth contains the phrase "GROUND
+        TRUTH PENDING" (the benchmark task is not ready to grade).
+
+        Fail if the answer is a refusal, an apology, a tool-availability
+        disclaimer, or otherwise does not attempt the task despite data
+        being available in the source of truth.
+
+        Otherwise, pass if the answer addresses the task and its important
+        counts, rankings, event names, and URLs match the source truth.
+        Allow concise wording differences and minor formatting differences.
+        Fail if important numeric claims contradict the source truth.
 
 tests:
   - description: Marketing blog top pages
@@ -104,35 +105,18 @@ tests:
         Using PostHog, find the top-performing marketing blog URLs by pageviews
         for April 6, 2026 through May 6, 2026. Return the ranked URLs,
         pageview counts, and the event/property used.
-      source_truth: |
-        Ground truth from PostHog pageview data for the same date window:
-        - Event: $pageview
-        - Property: properties.$current_url
-        - URL filter: contains /blog, including /blog/ and /blogs/
-        - #1 https://www.spreadsheetagent.com/blogs/gemini-google-sheets-ai-features = 79 pageviews
-        - #2 https://www.spreadsheetagent.com/blogs/facebook-marketplace-ai-upload-automation = 53 pageviews
-        - #3 https://www.spreadsheetagent.com/blogs/convert-pdf-to-spreadsheet-ai = 25 pageviews
-        - #4 https://www.spreadsheetagent.com/blog/job-application-tracker-google-sheets = 10 pageviews
-        - #5 https://www.spreadsheetagent.com/blogs/automate-manual-data-entry-spreadsheets = 9 pageviews
-        - #6 https://www.spreadsheetagent.com/blog/upload-files-images-google-sheets-folders = 9 pageviews
-        - #7 https://www.spreadsheetagent.com/blog/expense-tracking-spreadsheet-small-business = 8 pageviews
-        - #8 https://www.spreadsheetagent.com/blog/convert-pdf-to-google-sheets = 8 pageviews
+      source_truth: file://ground_truth/marketing-blog-top-pages.md
+    metadata:
+      prompt_id: marketing-blog-top-pages
 
   - description: Marketing top pages
     vars:
       prompt: >
         Using PostHog, identify the top pages or URLs by pageviews for
         April 6, 2026 through May 6, 2026. Return a ranked list with counts.
-      source_truth: |
-        Ground truth from PostHog $pageview data for the same date window:
-        - #1 / = 208 pageviews
-        - #2 /blogs/gemini-google-sheets-ai-features = 81 pageviews
-        - #3 /blogs/facebook-marketplace-ai-upload-automation = 55 pageviews
-        - #4 /login = 53 pageviews
-        - #5 /checkout = 33 pageviews
-        - #6 /blogs/convert-pdf-to-spreadsheet-ai = 25 pageviews
-        - #7 /blog/job-application-tracker-google-sheets = 10 pageviews
-        - #8 /setup-guide = 9 pageviews
+      source_truth: file://ground_truth/marketing-top-pages.md
+    metadata:
+      prompt_id: marketing-top-pages
 
   - description: App custom events
     vars:
@@ -140,13 +124,9 @@ tests:
         Using PostHog, find the top app-specific or custom events for
         April 6, 2026 through May 6, 2026, excluding generic pageview and
         autocapture-style events. Include event names and counts.
-      source_truth: |
-        Ground truth from PostHog event data for the same date window, excluding
-        $pageview, $autocapture, $pageleave, $identify, $set,
-        $feature_flag_called, and $web_vitals:
-        - $exception = 4 events
-        - $rageclick = 3 events
-        - agent_created = 1 event
+      source_truth: file://ground_truth/app-custom-events.md
+    metadata:
+      prompt_id: app-custom-events
 
   - description: Activation event count
     vars:
@@ -154,8 +134,42 @@ tests:
         Using PostHog, summarize signup, activation, and agent/workflow events
         for April 6, 2026 through May 6, 2026. Return event counts and unique
         people where available.
-      source_truth: |
-        Ground truth from PostHog event data for the same date window:
-        - Matching signup/activation/agent/workflow event found: agent_created
-        - agent_created = 1 event
-        - agent_created unique people = 1
+      source_truth: file://ground_truth/activation-event-count.md
+    metadata:
+      prompt_id: activation-event-count
+
+  # Multi-step drill-down: the agent must first find the top blog URL, then
+  # run a second breakdown query against it.
+  - description: Blog device drilldown
+    vars:
+      prompt: >
+        Using PostHog, find the single top marketing blog URL by pageviews for
+        April 6, 2026 through May 6, 2026, then break down that URL's
+        pageviews by device type. Return the URL and the device breakdown
+        with counts.
+      source_truth: file://ground_truth/blog-device-drilldown.md
+    metadata:
+      prompt_id: blog-device-drilldown
+
+  # Time bucketing: forces date math instead of a single top-N aggregation.
+  - description: Weekly pageview trend
+    vars:
+      prompt: >
+        Using PostHog, report weekly $pageview totals for April 6, 2026
+        through May 6, 2026 (weeks starting Monday), and say whether the
+        trend over those weeks is up, down, or flat.
+      source_truth: file://ground_truth/weekly-pageview-trend.md
+    metadata:
+      prompt_id: weekly-pageview-trend
+
+  # Larger output: a full inventory rather than a top-N, exercising how each
+  # surface handles bigger result sets.
+  - description: All pages inventory
+    vars:
+      prompt: >
+        Using PostHog, list every distinct page path that received pageviews
+        for April 6, 2026 through May 6, 2026, with pageview counts, ordered
+        from most to least viewed.
+      source_truth: file://ground_truth/all-pages-inventory.md
+    metadata:
+      prompt_id: all-pages-inventory

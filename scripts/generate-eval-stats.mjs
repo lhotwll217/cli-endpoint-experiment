@@ -45,12 +45,8 @@ function generateStats(folder) {
     .filter((file) => file.endsWith(".json"))
     .filter((file) => !["global_results.json", "run_metadata.json"].includes(file));
 
-  const suiteStats = [];
-  const approachStats = new Map();
-  const allLatencies = [];
-  let totalPass = 0;
-  let totalFail = 0;
-  let totalError = 0;
+  // One record per individual run (task x approach x repeat).
+  const records = [];
 
   for (const file of jsonFiles) {
     const data = readJson(join(folder, file));
@@ -58,52 +54,27 @@ function generateStats(folder) {
       continue;
     }
 
-    const promptMetrics = data.results.prompts?.[0]?.metrics ?? {};
-    const resultRows = data.results.results ?? [];
-    const pass = resultRows.filter((result) => result.success).length;
-    const error = resultRows.filter((result) => result.failureReason === "ERROR").length;
-    const fail = resultRows.length - pass - error;
-    totalPass += pass;
-    totalFail += fail;
-    totalError += error;
-
-    suiteStats.push({
-      name: file.replace(/\.json$/, ""),
-      pass,
-      fail,
-      error,
-      total: pass + fail + error,
-      passRate: rate(pass, pass + fail + error),
-      tokenUsage: promptMetrics.tokenUsage ?? {},
-      namedScores: promptMetrics.namedScores ?? {},
-    });
-
-    for (const result of resultRows) {
-      const latency = Number(result.latencyMs ?? result.response?.latencyMs ?? 0);
-      if (latency > 0) {
-        allLatencies.push(latency);
-      }
-      const approach = result.response?.metadata?.approach ?? result.provider?.id ?? "unknown";
-      const current = approachStats.get(approach) ?? createApproachStats(approach);
-      approachStats.set(approach, current);
-      current.total += 1;
-      if (result.success) current.pass += 1;
-      else if (result.failureReason === "ERROR") current.error += 1;
-      else current.fail += 1;
-      current.latencies.push(latency);
+    for (const result of data.results.results ?? []) {
       const metrics = result.response?.metadata?.metrics ?? {};
-      current.promptTokens += Number(metrics.promptTokens ?? result.response?.tokenUsage?.prompt ?? 0);
-      current.completionTokens += Number(metrics.completionTokens ?? result.response?.tokenUsage?.completion ?? 0);
-      current.totalTokens += Number(metrics.totalTokens ?? result.response?.tokenUsage?.total ?? 0);
-      current.toolCalls += Number(metrics.toolCalls ?? 0);
-      current.outputBytes += Number(metrics.outputBytes ?? 0);
-      current.loc = Number(metrics.loc ?? current.loc);
-      current.systemPromptBytes += Number(metrics.systemPromptBytes ?? 0);
-      current.toolPromptBytes += Number(metrics.toolPromptBytes ?? 0);
+      records.push({
+        task: taskLabel(result),
+        approach: result.response?.metadata?.approach ?? result.provider?.label ?? result.provider?.id ?? "unknown",
+        success: Boolean(result.success),
+        errored: result.failureReason === "ERROR",
+        latencyMs: firstPositive(metrics.latencyMs, result.latencyMs, result.response?.latencyMs),
+        promptTokens: firstPositive(metrics.promptTokens, result.response?.tokenUsage?.prompt),
+        completionTokens: firstPositive(metrics.completionTokens, result.response?.tokenUsage?.completion),
+        totalTokens: firstPositive(metrics.totalTokens, result.response?.tokenUsage?.total),
+        toolCalls: Number(metrics.toolCalls ?? 0),
+        outputBytes: Number(metrics.outputBytes ?? 0),
+      });
     }
   }
 
-  const total = totalPass + totalFail + totalError;
+  const pass = records.filter((record) => record.success).length;
+  const error = records.filter((record) => record.errored).length;
+  const fail = records.length - pass - error;
+
   return {
     runFolder: basename(folder),
     generatedAt: new Date().toISOString(),
@@ -113,62 +84,60 @@ function generateStats(folder) {
       commit: git(["rev-parse", "--short", "HEAD"]),
     },
     summary: {
-      suites: suiteStats.length,
-      total,
-      pass: totalPass,
-      fail: totalFail,
-      error: totalError,
-      passRate: rate(totalPass, total),
+      runs: records.length,
+      pass,
+      fail,
+      error,
+      passRate: rate(pass, records.length),
     },
-    latency: summarizeNumbers(allLatencies),
-    approaches: [...approachStats.values()].map(finalizeApproachStats),
-    suites: suiteStats,
+    approaches: groupStats(records, (record) => record.approach).map(([approach, group]) => ({
+      approach,
+      ...summarizeGroup(group),
+    })),
+    tasks: groupStats(records, (record) => `${record.task}::${record.approach}`).map(([key, group]) => {
+      const [task, approach] = key.split("::");
+      return { task, approach, ...summarizeGroup(group) };
+    }),
   };
 }
 
-function createApproachStats(approach) {
-  return {
-    approach,
-    total: 0,
-    pass: 0,
-    fail: 0,
-    error: 0,
-    latencies: [],
-    promptTokens: 0,
-    completionTokens: 0,
-    totalTokens: 0,
-    toolCalls: 0,
-    outputBytes: 0,
-    loc: 0,
-    systemPromptBytes: 0,
-    toolPromptBytes: 0,
-  };
+function taskLabel(result) {
+  return (
+    result.testCase?.description ??
+    result.description ??
+    result.testCase?.metadata?.prompt_id ??
+    truncate(String(result.testCase?.vars?.prompt ?? result.vars?.prompt ?? "unknown"), 60)
+  );
 }
 
-function finalizeApproachStats(stats) {
+function groupStats(records, keyFn) {
+  const groups = new Map();
+  for (const record of records) {
+    const key = keyFn(record);
+    const group = groups.get(key) ?? [];
+    group.push(record);
+    groups.set(key, group);
+  }
+  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+// The headline comparison is cost-of-success: what a run spends when it
+// actually answers correctly. Failed runs are counted but not averaged in.
+function summarizeGroup(group) {
+  const passed = group.filter((record) => record.success);
   return {
-    approach: stats.approach,
-    total: stats.total,
-    pass: stats.pass,
-    fail: stats.fail,
-    error: stats.error,
-    passRate: rate(stats.pass, stats.total),
-    latency: summarizeNumbers(stats.latencies),
-    tokens: {
-      prompt: stats.promptTokens,
-      completion: stats.completionTokens,
-      total: stats.totalTokens,
-      avgTotal: stats.total ? Math.round(stats.totalTokens / stats.total) : 0,
-    },
-    toolCalls: {
-      total: stats.toolCalls,
-      avg: stats.total ? round(stats.toolCalls / stats.total, 2) : 0,
-    },
-    outputBytes: stats.outputBytes,
-    loc: stats.loc,
-    promptBytes: {
-      system: stats.systemPromptBytes,
-      tool: stats.toolPromptBytes,
+    runs: group.length,
+    pass: passed.length,
+    fail: group.filter((record) => !record.success && !record.errored).length,
+    error: group.filter((record) => record.errored).length,
+    passRate: rate(passed.length, group.length),
+    onSuccess: {
+      totalTokens: distribution(passed.map((record) => record.totalTokens)),
+      promptTokens: distribution(passed.map((record) => record.promptTokens)),
+      completionTokens: distribution(passed.map((record) => record.completionTokens)),
+      latencyMs: distribution(passed.map((record) => record.latencyMs)),
+      toolCalls: distribution(passed.map((record) => record.toolCalls)),
+      outputBytes: distribution(passed.map((record) => record.outputBytes)),
     },
   };
 }
@@ -181,8 +150,8 @@ function buildStatsLogEntry(stats) {
     commit: stats.git.commit,
     model: stats.metadata.model,
     reasoningEffort: stats.metadata.reasoningEffort,
+    repeat: stats.metadata.repeat,
     summary: stats.summary,
-    latency: stats.latency,
     approaches: stats.approaches,
   };
 }
@@ -197,28 +166,56 @@ function prependStatsLog(path, entry) {
 function printSummary(stats) {
   console.log("\nEvaluation stats");
   console.log(`Run: ${stats.runFolder}`);
-  console.log(`Pass rate: ${stats.summary.passRate}% (${stats.summary.pass}/${stats.summary.total})`);
-  console.log(`Latency mean: ${stats.latency.meanMs ?? "N/A"}ms`);
+  console.log(`Pass rate: ${stats.summary.passRate}% (${stats.summary.pass}/${stats.summary.runs} runs)`);
+  console.log("\nCost of success (median over passing runs):");
   for (const approach of stats.approaches) {
+    const success = approach.onSuccess;
     console.log(
-      `${approach.approach}: pass ${approach.pass}/${approach.total}, tokens avg ${approach.tokens.avgTotal}, latency mean ${approach.latency.meanMs ?? "N/A"}ms, tools avg ${approach.toolCalls.avg}`,
+      `  ${approach.approach}: pass ${approach.pass}/${approach.runs} (${approach.passRate}%), ` +
+        `tokens ${success.totalTokens.median ?? "N/A"}, ` +
+        `latency ${success.latencyMs.median ?? "N/A"}ms, ` +
+        `tools ${success.toolCalls.median ?? "N/A"}`,
+    );
+  }
+  console.log("\nPer task:");
+  for (const task of stats.tasks) {
+    console.log(
+      `  ${task.task} [${task.approach}]: pass ${task.pass}/${task.runs}, ` +
+        `tokens ${task.onSuccess.totalTokens.median ?? "N/A"}, latency ${task.onSuccess.latencyMs.median ?? "N/A"}ms`,
     );
   }
 }
 
-function summarizeNumbers(values) {
-  const clean = values.filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+function distribution(values) {
+  const clean = values.filter((value) => Number.isFinite(value) && value >= 0).sort((a, b) => a - b);
   if (clean.length === 0) {
     return {};
   }
   const sum = clean.reduce((acc, value) => acc + value, 0);
   return {
     count: clean.length,
-    meanMs: round(sum / clean.length, 2),
-    medianMs: round(clean[Math.floor(clean.length / 2)], 2),
-    minMs: round(clean[0], 2),
-    maxMs: round(clean[clean.length - 1], 2),
+    mean: round(sum / clean.length, 2),
+    median: round(median(clean), 2),
+    min: round(clean[0], 2),
+    max: round(clean[clean.length - 1], 2),
   };
+}
+
+function median(sortedValues) {
+  const middle = Math.floor(sortedValues.length / 2);
+  return sortedValues.length % 2 === 0
+    ? (sortedValues[middle - 1] + sortedValues[middle]) / 2
+    : sortedValues[middle];
+}
+
+function firstPositive(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric;
+    }
+  }
+  return 0;
 }
 
 function rate(count, total) {
@@ -228,6 +225,10 @@ function rate(count, total) {
 function round(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
+}
+
+function truncate(value, limit) {
+  return value.length > limit ? `${value.slice(0, limit)}...` : value;
 }
 
 function readJson(path) {
