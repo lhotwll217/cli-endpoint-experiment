@@ -99,16 +99,6 @@ defaultTest:
         Fail if important numeric claims contradict the source truth.
 
 tests:
-  - description: Marketing blog top pages
-    vars:
-      prompt: >
-        Using PostHog, find the top-performing marketing blog URLs by pageviews
-        for April 6, 2026 through May 6, 2026. Return the ranked URLs,
-        pageview counts, and the event/property used.
-      source_truth: file://ground_truth/marketing-blog-top-pages.md
-    metadata:
-      prompt_id: marketing-blog-top-pages
-
   - description: Marketing top pages
     vars:
       prompt: >
@@ -117,26 +107,6 @@ tests:
       source_truth: file://ground_truth/marketing-top-pages.md
     metadata:
       prompt_id: marketing-top-pages
-
-  - description: App custom events
-    vars:
-      prompt: >
-        Using PostHog, find the top app-specific or custom events for
-        April 6, 2026 through May 6, 2026, excluding generic pageview and
-        autocapture-style events. Include event names and counts.
-      source_truth: file://ground_truth/app-custom-events.md
-    metadata:
-      prompt_id: app-custom-events
-
-  - description: Activation event count
-    vars:
-      prompt: >
-        Using PostHog, summarize signup, activation, and agent/workflow events
-        for April 6, 2026 through May 6, 2026. Return event counts and unique
-        people where available.
-      source_truth: file://ground_truth/activation-event-count.md
-    metadata:
-      prompt_id: activation-event-count
 
   # Multi-step drill-down: the agent must first find the top blog URL, then
   # run a second breakdown query against it.
@@ -151,17 +121,6 @@ tests:
     metadata:
       prompt_id: blog-device-drilldown
 
-  # Time bucketing: forces date math instead of a single top-N aggregation.
-  - description: Weekly pageview trend
-    vars:
-      prompt: >
-        Using PostHog, report weekly $pageview totals for April 6, 2026
-        through May 6, 2026 (weeks starting Monday), and say whether the
-        trend over those weeks is up, down, or flat.
-      source_truth: file://ground_truth/weekly-pageview-trend.md
-    metadata:
-      prompt_id: weekly-pageview-trend
-
   # Larger output: a full inventory rather than a top-N, exercising how each
   # surface handles bigger result sets.
   - description: All pages inventory
@@ -173,3 +132,64 @@ tests:
       source_truth: file://ground_truth/all-pages-inventory.md
     metadata:
       prompt_id: all-pages-inventory
+
+  # Event-name discovery: the prompt describes the product flows in plain
+  # language; the agent must find the actual event names.
+  - description: Product usage events
+    vars:
+      prompt: >
+        Using PostHog, summarize the product usage events for the
+        extract-to-sheet flows between June 15 and July 4, 2026 — extractions,
+        sheet inserts, credit usage, sign-ins, and checkout activity. Return
+        the actual event names with event counts and unique people.
+      source_truth: file://ground_truth/product-usage-events.md
+    metadata:
+      prompt_id: product-usage-events
+
+  # Anomaly spotting on a low-volume pipeline.
+  - description: OAuth token pipeline
+    vars:
+      prompt: >
+        Using PostHog, analyze the Google OAuth token pipeline for June 15
+        through July 4, 2026: report the count of each google_oauth_tokens
+        event and point out anything inconsistent between the counts.
+      source_truth: file://ground_truth/oauth-token-pipeline.md
+    metadata:
+      prompt_id: oauth-token-pipeline
+
+  # High-volume background job health check.
+  - description: Trial credits batch health
+    vars:
+      prompt: >
+        Using PostHog, check the health of the trial credits batch job for
+        June 15 through July 4, 2026: how many batch runs started versus
+        completed, how many days it was active, and how many trial credit
+        grants actually happened.
+      source_truth: file://ground_truth/trial-credits-batch-health.md
+    metadata:
+      prompt_id: trial-credits-batch-health
+
+  # Data-warehouse discovery: the answer lives in Google Ads warehouse
+  # tables, not events. Table names must be discovered.
+  - description: Ads campaign overview
+    vars:
+      prompt: >
+        Using the Google Ads data connected to PostHog (data warehouse),
+        report each campaign's name, total clicks, impressions, spend in
+        dollars, and CTR for June 1 through June 30, 2026.
+      source_truth: file://ground_truth/ads-campaign-overview.md
+    metadata:
+      prompt_id: ads-campaign-overview
+
+  # Cross-source comparison: warehouse table joined conceptually with
+  # product analytics events, bucketed by week.
+  - description: Ads clicks vs pageviews weekly
+    vars:
+      prompt: >
+        Using PostHog, compare weekly Google Ads clicks (from the connected
+        ads data warehouse) against weekly website pageviews for June 1
+        through June 30, 2026, weeks starting Monday. Return both weekly
+        series with counts.
+      source_truth: file://ground_truth/ads-clicks-vs-pageviews-weekly.md
+    metadata:
+      prompt_id: ads-clicks-vs-pageviews-weekly
