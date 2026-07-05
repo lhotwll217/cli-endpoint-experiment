@@ -15,7 +15,7 @@ export class CliPostHogAdapter implements PostHogIntegrationAdapter {
       posthog_cli: tool({
         description: [
           "Run a PostHog CLI command. The command must start with posthog-cli.",
-          "Use help commands to discover the CLI surface when needed, then run read-only commands for this benchmark.",
+          'Run "posthog-cli skill" once for the usage guide, or discover the surface with --help commands, then run read-only commands.',
         ].join(" "),
         inputSchema: z.object({
           command: z

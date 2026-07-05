@@ -10,9 +10,8 @@ const sharedAgentIdentity = [
 const approachToolPrompts: Record<Approach, string> = {
   cli: [
     "You have a terminal-like PostHog CLI tool named posthog_cli.",
-    "Use it like the PostHog CLI: run help commands when you need to discover the command surface, then run the relevant read-only command.",
-    "For analytics questions, prefer discovering and using `posthog-cli exp query run` with a read-only SELECT query.",
-    "The CLI is already authenticated and configured for the current PostHog project/environment.",
+    "It is already authenticated for the current PostHog project/environment.",
+    "Run `posthog-cli skill` for the usage guide, or discover commands with --help.",
   ].join("\n"),
   mcp: [
     "You have PostHog MCP tools discovered from the MCP server at runtime.",

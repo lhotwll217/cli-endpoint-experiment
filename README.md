@@ -40,11 +40,36 @@ terminal: available commands, options, and follow-up help paths such as
 `posthog-cli exp --help` or `posthog-cli exp query run --help`. No capability
 is pre-modeled as a typed tool; the agent discovers what it needs.
 
+### The skill rung
+
+The help ladder has one optional extra rung: `posthog-cli skill` returns a
+SKILL.md-formatted usage guide — the high-value instructions (HogQL tips,
+constraints, worked examples) that make an agent measurably better at driving
+the surface. Root `--help` advertises it, the wrapper answers it server-side
+(the real binary never runs), and the agent spends those tokens only when it
+chooses to. This is the server-side answer to what Agent Skills do
+client-side: instead of shipping instruction files to every agent, the
+surface hands out its own instructions, versioned and deployed with the
+service they describe.
+
 In this experiment the endpoint wraps the actual `posthog-cli` binary, because
 the binary already exists and keeps the experiment faithful. That is an
 implementation detail the agent cannot observe: a production server would
 implement the same command grammar directly against its real API, and nothing
 about the interface — or this benchmark — would change.
+
+### The honest trade
+
+This pattern does not eliminate integration work. A service adopting it must
+build and maintain a command grammar — a parser, a help tree, handlers — which
+is the same order of effort as building an MCP server. What changes is where
+that work lives and when it is paid for: entirely server-side, deployed and
+versioned with the service itself. The client integration collapses to one
+generic tool and a URL, discovery costs are paid per `--help` call instead of
+per connection, and nothing about the integration lives on the client, so
+nothing on the client can go stale. Services that already ship a CLI — like
+PostHog — have already paid the grammar cost, which is the cheapest adoption
+path.
 
 ## The comparison
 

@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parsePostHogCliCommand } from "@/infrastructure/cli/command-validation";
+import {
+  CLI_HELP_SKILL_ADDENDUM,
+  CLI_SKILL_TEXT,
+  isRootHelpCommand,
+  isSkillCommand,
+} from "@/infrastructure/cli/cli-skill";
 
 export type CliStreamEvent =
   | {
@@ -68,6 +74,22 @@ export async function* runPostHogCliStream(
 ): AsyncGenerator<CliStreamEvent> {
   const argv = parsePostHogCliCommand(command);
   const started = Date.now();
+
+  if (isSkillCommand(argv)) {
+    yield { type: "start", command, argv, at: new Date(started).toISOString() };
+    yield { type: "stdout", chunk: CLI_SKILL_TEXT, at: new Date().toISOString() };
+    yield {
+      type: "exit",
+      code: 0,
+      signal: null,
+      durationMs: Date.now() - started,
+      stdoutBytes: Buffer.byteLength(CLI_SKILL_TEXT),
+      stderrBytes: 0,
+      at: new Date().toISOString(),
+    };
+    return;
+  }
+
   const queue: QueueState = { events: [], done: false };
   let stdoutBytes = 0;
   let stderrBytes = 0;
@@ -152,6 +174,11 @@ export async function* runPostHogCliStream(
 
     const event = queue.events.shift();
     if (event) {
+      // Advertise the skill meta-command in root help, per the framing: help
+      // optionally lists a skill when usage instructions are high-value.
+      if (event.type === "exit" && event.code === 0 && isRootHelpCommand(argv)) {
+        yield { type: "stdout", chunk: CLI_HELP_SKILL_ADDENDUM, at: new Date().toISOString() };
+      }
       yield event;
     }
   }
