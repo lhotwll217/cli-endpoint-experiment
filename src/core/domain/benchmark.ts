@@ -1,7 +1,6 @@
 export const APPROACHES = ["cli", "api", "mcp"] as const;
 
 export type Approach = (typeof APPROACHES)[number];
-export type ApproachSelection = Approach | "all";
 
 export type RunStatus = "idle" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -52,12 +51,6 @@ export type BenchmarkRun = {
   traces: ToolTrace[];
   metrics: RunMetrics;
   error?: string;
-};
-
-export type BenchmarkTask = {
-  id: string;
-  title: string;
-  prompt: string;
 };
 
 export type BenchmarkChatMessage = {

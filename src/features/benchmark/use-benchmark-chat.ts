@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   APPROACHES,
   type Approach,
-  type ApproachSelection,
   type BenchmarkChatMessage,
   type BenchmarkStreamEvent,
   type RunMetrics,
@@ -82,15 +81,14 @@ export function useBenchmarkChat() {
   }, [cancel]);
 
   const send = React.useCallback(
-    async (selection: ApproachSelection, content: string) => {
+    async (targets: readonly Approach[], content: string) => {
       const prompt = content.trim();
-      if (!prompt) {
+      if (!prompt || targets.length === 0) {
         return;
       }
 
       cancel();
 
-      const targets = selection === "all" ? APPROACHES : [selection];
       const previous = historyRef.current;
       const userMessage: BenchmarkChatEntry = {
         id: makeId(),
@@ -224,7 +222,6 @@ function applyStreamEvent(
         ...message,
         status: "failed",
         error: event.error,
-        content: message.content || event.error,
         metrics: event.metrics,
         traces: event.traces,
       };
