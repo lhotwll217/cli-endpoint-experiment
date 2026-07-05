@@ -4,14 +4,14 @@ export const appTheme = {
   radius: "0.5rem",
   approaches: {
     cli: {
-      label: "CLI",
-      description: "One HTTP tool that takes a PostHog CLI string.",
+      label: "HTTP CLI",
+      description: "One HTTP endpoint that accepts a CLI command string; the agent discovers the surface via --help.",
       cssVar: "var(--approach-cli)",
       softCssVar: "var(--approach-cli-soft)",
     },
     api: {
       label: "API",
-      description: "Typed tools backed by direct PostHog API calls.",
+      description: "Typed tools backed by direct PostHog API calls (eval-only control, not shown in the demo).",
       cssVar: "var(--approach-api)",
       softCssVar: "var(--approach-api-soft)",
     },
@@ -34,3 +34,7 @@ export const appTheme = {
 export function getApproachTheme(approach: Approach) {
   return appTheme.approaches[approach];
 }
+
+// The demo UI races these two; "api" stays available to the benchmark
+// endpoint and eval suite as the typed-tools control.
+export const demoApproaches = ["cli", "mcp"] as const satisfies readonly Approach[];

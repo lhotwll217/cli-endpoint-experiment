@@ -6,17 +6,14 @@ import {
   Braces,
   ChevronDown,
   Clock,
-  Code2,
-  FileText,
   Loader2,
   Play,
   RotateCcw,
-  Send,
   Square,
   Wrench,
 } from "lucide-react";
-import { APPROACHES, type Approach, type BenchmarkRun, type RunMetrics, type ToolTrace } from "@/core/domain/benchmark";
-import { getApproachTheme } from "@/config/theme.config";
+import type { Approach, BenchmarkRun, RunMetrics, ToolTrace } from "@/core/domain/benchmark";
+import { demoApproaches, getApproachTheme } from "@/config/theme.config";
 import { type BenchmarkChatEntry, useBenchmarkChat } from "@/features/benchmark/use-benchmark-chat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,40 +27,34 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function BenchmarkDashboard() {
-  const [activeApproach, setActiveApproach] = React.useState<Approach>("cli");
   const [draft, setDraft] = React.useState("");
   const { runs, messages, send, cancel, clear, isRunning } = useBenchmarkChat();
-  const hasStarted = messages.length > 0;
-  const activeMessages = messages.filter((message) => isVisibleInApproach(message, activeApproach));
 
-  async function submit(target: Approach | "all") {
+  async function submit() {
     const prompt = draft.trim();
     if (!prompt || isRunning) {
       return;
     }
-
-    const resolvedTarget = target === "all" && hasStarted ? activeApproach : target;
     setDraft("");
-    await send(resolvedTarget, prompt);
+    await send(demoApproaches, prompt);
   }
 
   return (
     <TooltipProvider>
       <main className="min-h-screen bg-background text-foreground">
-        <div className="mx-auto grid h-screen w-full max-w-[1720px] grid-rows-[auto_1fr] gap-3 px-4 py-3 lg:px-5">
+        <div className="mx-auto grid h-screen w-full max-w-[1720px] grid-rows-[auto_1fr_auto] gap-3 px-4 py-3 lg:px-5">
           <header className="flex items-center justify-between gap-3 border-b border-border pb-3">
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-2">
                 <Badge variant="outline">PostHog</Badge>
-                <Badge variant="muted">Agent loop comparison</Badge>
+                <Badge variant="muted">Same prompt, two integration surfaces</Badge>
               </div>
               <h1 className="truncate text-xl font-semibold tracking-normal lg:text-2xl">
-                Parallel Chat Workbench
+                HTTP CLI vs MCP
               </h1>
             </div>
 
@@ -74,7 +65,7 @@ export function BenchmarkDashboard() {
                     <Square className="size-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Cancel active run</TooltipContent>
+                <TooltipContent>Cancel active runs</TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -83,69 +74,23 @@ export function BenchmarkDashboard() {
                     <RotateCcw className="size-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>New chat</TooltipContent>
+                <TooltipContent>New race</TooltipContent>
               </Tooltip>
             </div>
           </header>
 
-          <section className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
-              <Tabs
-                value={activeApproach}
-                onValueChange={(value) => setActiveApproach(value as Approach)}
-                className="flex min-h-0 flex-1 flex-col"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-3 py-2">
-                  <TabsList className="grid h-10 w-full grid-cols-3 sm:w-[420px]">
-                    {APPROACHES.map((approach) => {
-                      const theme = getApproachTheme(approach);
-                      const run = runs[approach];
-                      return (
-                        <TabsTrigger key={approach} value={approach} className="h-8 gap-2">
-                          <span className="size-2 rounded-full" style={{ background: theme.cssVar }} />
-                          {theme.label}
-                          {run.status === "running" && <Loader2 className="size-3 animate-spin" />}
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{hasStarted ? "Follow-ups go to the active tab" : "First prompt can fan out to all tabs"}</span>
-                    <TraceDialog
-                      label={`${getApproachTheme(activeApproach).label} trace`}
-                      metrics={runs[activeApproach].metrics}
-                      traces={runs[activeApproach].traces}
-                      error={runs[activeApproach].error}
-                    />
-                  </div>
-                </div>
-
-                {APPROACHES.map((approach) => (
-                  <TabsContent key={approach} value={approach} className="m-0 flex min-h-0 flex-1 flex-col">
-                    <ChatTranscript
-                      approach={approach}
-                      messages={approach === activeApproach ? activeMessages : messages.filter((message) => isVisibleInApproach(message, approach))}
-                      run={runs[approach]}
-                    />
-                  </TabsContent>
-                ))}
-              </Tabs>
-
-              <Composer
-                activeApproach={activeApproach}
-                draft={draft}
-                hasStarted={hasStarted}
-                isRunning={isRunning}
-                onDraftChange={setDraft}
-                onSubmit={submit}
+          <section className="grid min-h-0 gap-3 lg:grid-cols-2">
+            {demoApproaches.map((approach) => (
+              <RacePane
+                key={approach}
+                approach={approach}
+                run={runs[approach]}
+                messages={messages.filter((message) => isVisibleInApproach(message, approach))}
               />
-            </div>
-
-            <aside className="hidden min-h-0 flex-col gap-3 xl:flex">
-              <ReadoutPanel runs={runs} />
-            </aside>
+            ))}
           </section>
+
+          <Composer draft={draft} isRunning={isRunning} onDraftChange={setDraft} onSubmit={submit} />
         </div>
       </main>
     </TooltipProvider>
@@ -159,46 +104,129 @@ function isVisibleInApproach(message: BenchmarkChatEntry, approach: Approach) {
   return !message.approaches || message.approaches.includes(approach);
 }
 
-function ChatTranscript({
+function RacePane({
   approach,
-  messages,
   run,
+  messages,
 }: {
   approach: Approach;
-  messages: BenchmarkChatEntry[];
   run: BenchmarkRun;
+  messages: BenchmarkChatEntry[];
 }) {
+  const theme = getApproachTheme(approach);
+
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6 pb-32">
-        {messages.length === 0 ? (
-          <EmptyConversation approach={approach} />
-        ) : (
-          messages.map((message) => <ChatMessage key={message.id} message={message} approach={approach} />)
-        )}
-        {run.status === "running" && !messages.some((message) => message.status === "running") && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Agent loop running...
-          </div>
-        )}
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="size-2.5 shrink-0 rounded-full" style={{ background: theme.cssVar }} />
+          <span className="truncate text-sm font-semibold">{theme.label}</span>
+          <Badge variant="outline">{run.status}</Badge>
+          {run.status === "running" && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+        </div>
+        <div className="flex items-center gap-2">
+          <TraceDialog
+            label={`${theme.label} trace`}
+            metrics={run.metrics}
+            traces={run.traces}
+            error={run.error}
+          />
+        </div>
+      </div>
+
+      <MetricsStrip run={run} />
+
+      <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
+        <div className="flex w-full flex-col gap-4 px-3 py-4">
+          {messages.length === 0 ? (
+            <EmptyConversation approach={approach} />
+          ) : (
+            messages.map((message) => <ChatMessage key={message.id} message={message} approach={approach} />)
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
+function MetricsStrip({ run }: { run: BenchmarkRun }) {
+  const elapsedMs = useElapsedMs(run);
+  const metrics = run.metrics;
+
+  return (
+    <div className="grid grid-cols-3 gap-2 border-b border-border bg-card px-3 py-2 text-xs">
+      <StripMetric
+        icon={<Activity className="size-3.5" />}
+        label="Tokens"
+        value={metrics.totalTokens.toLocaleString()}
+        detail={`${metrics.promptTokens.toLocaleString()} in / ${metrics.completionTokens.toLocaleString()} out`}
+      />
+      <StripMetric
+        icon={<Wrench className="size-3.5" />}
+        label="Tool calls"
+        value={String(metrics.toolCalls)}
+        detail={`${formatBytes(metrics.outputBytes)} output`}
+      />
+      <StripMetric
+        icon={<Clock className="size-3.5" />}
+        label="Elapsed"
+        value={formatMs(elapsedMs)}
+        detail={run.status === "running" ? "live" : "latest turn"}
+      />
+    </div>
+  );
+}
+
+function StripMetric({
+  icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-background px-2 py-1.5">
+      <div className="flex items-center gap-1 text-muted-foreground">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="mt-0.5 truncate font-medium tabular-nums">{value}</div>
+      <div className="truncate text-[10px] text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function useElapsedMs(run: BenchmarkRun): number {
+  const [now, setNow] = React.useState(() => Date.now());
+
+  React.useEffect(() => {
+    if (run.status !== "running") {
+      return;
+    }
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [run.status]);
+
+  if (run.status === "running" && run.startedAt) {
+    return Math.max(0, now - new Date(run.startedAt).getTime());
+  }
+  return run.metrics.latencyMs;
+}
+
 function EmptyConversation({ approach }: { approach: Approach }) {
   const theme = getApproachTheme(approach);
   return (
-    <div className="mx-auto flex max-w-xl flex-col items-center gap-3 py-20 text-center">
+    <div className="mx-auto flex max-w-md flex-col items-center gap-3 py-16 text-center">
       <div className="flex size-12 items-center justify-center rounded-lg border border-border bg-background">
         <Activity className="size-5 text-muted-foreground" />
       </div>
       <div>
-        <h2 className="text-lg font-semibold">{theme.label} conversation</h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Send a prompt to run the {theme.label} agent. Tool calls appear inside each response.
-        </p>
+        <h2 className="text-base font-semibold">{theme.label}</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{theme.description}</p>
       </div>
     </div>
   );
@@ -208,7 +236,7 @@ function ChatMessage({ message, approach }: { message: BenchmarkChatEntry; appro
   if (message.role === "user") {
     return (
       <article className="flex justify-end">
-        <div className="max-w-[78%] rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
+        <div className="max-w-[85%] rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
           {message.content}
         </div>
       </article>
@@ -216,133 +244,163 @@ function ChatMessage({ message, approach }: { message: BenchmarkChatEntry; appro
   }
 
   const theme = getApproachTheme(approach);
-  const metrics = message.metrics;
-  const toolTraceCount = getToolTraceEvents(message.traces ?? []).length;
+  const toolCards = groupToolCalls(message.traces ?? []);
 
   return (
     <article className="flex justify-start">
-      <div className="max-w-[86%] rounded-lg border border-border bg-background shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+      <div className="w-full max-w-[95%] rounded-lg border border-border bg-background shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full" style={{ background: theme.cssVar }} />
             <span className="text-sm font-medium">{theme.label}</span>
             <Badge variant="outline">{message.status ?? "idle"}</Badge>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{metrics?.totalTokens.toLocaleString() ?? 0} tokens</span>
-            <span>{metrics?.toolCalls ?? 0} tools</span>
-            <TraceDialog
-              label={`${theme.label} message trace`}
-              metrics={metrics}
-              traces={message.traces ?? []}
-              error={message.error}
-            />
+            <span>{message.metrics?.totalTokens.toLocaleString() ?? 0} tokens</span>
+            <span>{message.metrics?.toolCalls ?? 0} tools</span>
           </div>
         </div>
+
+        {toolCards.length > 0 && (
+          <div className="space-y-2 border-b border-border bg-muted/20 p-2">
+            {toolCards.map((card, index) => (
+              <ToolCallCard key={card.key} card={card} index={index} />
+            ))}
+          </div>
+        )}
+
         <div className="whitespace-pre-wrap px-4 py-3 text-sm leading-6">
           {message.content ? (
             message.content
           ) : message.status === "running" ? (
             <span className="inline-flex items-center gap-2 text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
-              Running agent loop...
+              {toolCards.length > 0 ? "Working through tool calls..." : "Agent loop running..."}
             </span>
-          ) : toolTraceCount > 0 ? (
-            <span className="text-muted-foreground">Agent returned tool events but no final text. Open tool calls below.</span>
+          ) : message.error ? null : toolCards.length > 0 ? (
+            <span className="text-muted-foreground">Agent returned tool events but no final text.</span>
           ) : (
             <span className="text-muted-foreground">No assistant text.</span>
           )}
-          {message.error && <div className="mt-3 text-sm text-destructive">{message.error}</div>}
+          {message.error && <div className={`text-sm text-destructive ${message.content ? "mt-3" : ""}`}>{message.error}</div>}
         </div>
-        <ToolCallsDisclosure traces={message.traces ?? []} />
       </div>
     </article>
   );
 }
 
-const TOOL_TRACE_PHASES: ToolTrace["phase"][] = [
-  "tool-call",
-  "tool-result",
-  "tool-error",
-  "stdout",
-  "stderr",
-  "exit",
-];
+type ToolCallCard = {
+  key: string;
+  toolName: string;
+  summary: string;
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+  durationMs?: number;
+  outputBytes: number;
+  pending: boolean;
+};
 
-function ToolCallsDisclosure({ traces }: { traces: ToolTrace[] }) {
-  const detailsRef = React.useRef<HTMLDetailsElement>(null);
-  const toolTraces = getToolTraceEvents(traces);
+// Call and result traces carry independent ids, so pair them by order: a
+// tool-call opens a card and the next result/error for that tool closes it.
+function groupToolCalls(traces: ToolTrace[]): ToolCallCard[] {
+  const cards: ToolCallCard[] = [];
 
-  if (toolTraces.length === 0) {
-    return null;
+  for (const trace of traces) {
+    if (trace.phase === "tool-call") {
+      cards.push({
+        key: trace.id,
+        toolName: trace.toolName,
+        summary: summarizeInput(trace.toolName, trace.input),
+        input: trace.input,
+        outputBytes: 0,
+        pending: true,
+      });
+      continue;
+    }
+
+    if (trace.phase !== "tool-result" && trace.phase !== "tool-error") {
+      continue;
+    }
+
+    const open = cards.findLast((card) => card.pending && card.toolName === trace.toolName);
+    if (!open) {
+      continue;
+    }
+
+    open.pending = false;
+    open.output = trace.output;
+    open.error = trace.error;
+    open.durationMs = trace.durationMs;
+    open.outputBytes = payloadBytes(trace.output ?? trace.error);
   }
 
-  const callCount = toolTraces.filter((trace) => trace.phase === "tool-call").length || toolTraces.length;
+  return cards;
+}
 
+function summarizeInput(toolName: string, input: unknown): string {
+  if (input && typeof input === "object" && "command" in input && typeof input.command === "string") {
+    return input.command;
+  }
+  if (input === undefined || input === null) {
+    return toolName;
+  }
+  const text = typeof input === "string" ? input : JSON.stringify(input);
+  return text === "{}" ? toolName : `${toolName} ${text}`;
+}
+
+function payloadBytes(value: unknown): number {
+  if (value === undefined || value === null) {
+    return 0;
+  }
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return new TextEncoder().encode(text).byteLength;
+}
+
+function ToolCallCard({ card, index }: { card: ToolCallCard; index: number }) {
   return (
-    <details
-      ref={detailsRef}
-      className="group scroll-mb-36 border-t border-border"
-      onToggle={(event) => {
-        if (event.currentTarget.open) {
-          requestAnimationFrame(() => detailsRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }));
-        }
-      }}
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 text-xs text-muted-foreground hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
-        <span className="inline-flex min-w-0 items-center gap-2">
-          <Wrench className="size-3.5 shrink-0" />
-          <span className="truncate">Tool calls ({callCount})</span>
+    <details className="group rounded-md border border-border bg-background text-xs">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 items-center gap-2">
+          <Badge variant="outline" className={card.error ? "border-destructive text-destructive" : undefined}>
+            {index + 1}
+          </Badge>
+          <code className="truncate font-mono">{card.summary}</code>
         </span>
-        <ChevronDown className="size-3.5 shrink-0 transition-transform group-open:rotate-180" />
+        <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+          {card.pending ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <>
+              {card.durationMs !== undefined && <span>{formatMs(card.durationMs)}</span>}
+              <span>{formatBytes(card.outputBytes)}</span>
+            </>
+          )}
+          <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+        </span>
       </summary>
-      <div className="border-t border-border bg-muted/20">
-        <div className="space-y-3 p-3">
-          {toolTraces.map((trace, index) => (
-            <ToolTraceItem key={`${trace.id}-${trace.phase}-${index}`} trace={trace} index={index} />
-          ))}
-        </div>
+      <div className="space-y-2 border-t border-border p-3">
+        <ToolCallPayload label="Input" value={card.input} />
+        <ToolCallPayload label={card.error ? "Error" : "Output"} value={card.error ?? card.output} isError={Boolean(card.error)} />
       </div>
     </details>
   );
 }
 
-function ToolTraceItem({ trace, index }: { trace: ToolTrace; index: number }) {
-  const payload = trace.error ?? trace.output ?? trace.input;
-  const formattedPayload = formatTracePayload(payload);
+function ToolCallPayload({ label, value, isError }: { label: string; value: unknown; isError?: boolean }) {
+  const formatted = formatTracePayload(value);
+  if (!formatted) {
+    return null;
+  }
 
   return (
-    <div className="rounded-md border border-border bg-background p-3 text-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge
-            variant="outline"
-            className={trace.phase === "tool-error" || trace.phase === "stderr" ? "border-destructive text-destructive" : undefined}
-          >
-            {formatTracePhase(trace.phase)}
-          </Badge>
-          <span className="truncate font-medium">{trace.toolName || `tool-${index + 1}`}</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 text-muted-foreground">
-          {trace.durationMs !== undefined && <span>{formatMs(trace.durationMs)}</span>}
-          <span>{new Date(trace.at).toLocaleTimeString()}</span>
-        </div>
-      </div>
-      {formattedPayload && (
-        <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap rounded-md bg-muted px-2 py-2 text-[11px] leading-5 text-foreground">
-          {formattedPayload}
-        </pre>
-      )}
+    <div>
+      <div className={`mb-1 font-medium ${isError ? "text-destructive" : "text-muted-foreground"}`}>{label}</div>
+      <pre className="max-h-80 max-w-full overflow-auto whitespace-pre-wrap rounded-md bg-muted px-2 py-2 text-[11px] leading-5 text-foreground">
+        {formatted}
+      </pre>
     </div>
   );
-}
-
-function getToolTraceEvents(traces: ToolTrace[]): ToolTrace[] {
-  return traces.filter((trace) => TOOL_TRACE_PHASES.includes(trace.phase));
-}
-
-function formatTracePhase(phase: ToolTrace["phase"]): string {
-  return phase.replaceAll("-", " ");
 }
 
 function formatTracePayload(value: unknown): string {
@@ -351,107 +409,43 @@ function formatTracePayload(value: unknown): string {
   }
 
   const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-  return text.length > 1_800 ? `${text.slice(0, 1_800)}...` : text;
+  return text.length > 6_000 ? `${text.slice(0, 6_000)}...` : text;
 }
 
 function Composer({
-  activeApproach,
   draft,
-  hasStarted,
   isRunning,
   onDraftChange,
   onSubmit,
 }: {
-  activeApproach: Approach;
   draft: string;
-  hasStarted: boolean;
   isRunning: boolean;
   onDraftChange: (value: string) => void;
-  onSubmit: (target: Approach | "all") => void;
+  onSubmit: () => void;
 }) {
-  const activeTheme = getApproachTheme(activeApproach);
-
   return (
-    <div className="border-t border-border bg-card p-3">
-      <div className="mx-auto max-w-4xl rounded-lg border border-input bg-background shadow-sm">
-        <Textarea
-          value={draft}
-          onChange={(event) => onDraftChange(event.target.value)}
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-              event.preventDefault();
-              onSubmit(activeApproach);
-            }
-          }}
-          placeholder={hasStarted ? `Message ${activeTheme.label}...` : "Ask the first benchmark question..."}
-          className="min-h-24 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{draft.length.toLocaleString()} chars</span>
-            <span>{hasStarted ? `Follow-up target: ${activeTheme.label}` : "Run All is only available before the first message"}</span>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onSubmit(activeApproach)} disabled={isRunning || !draft.trim()}>
-              <Send className="size-4" />
-              Send
-            </Button>
-            <Button onClick={() => onSubmit("all")} disabled={isRunning || !draft.trim() || hasStarted}>
-              <Play className="size-4" />
-              Run All
-            </Button>
-          </div>
-        </div>
+    <div className="rounded-lg border border-input bg-background shadow-sm">
+      <Textarea
+        value={draft}
+        onChange={(event) => onDraftChange(event.target.value)}
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            event.preventDefault();
+            onSubmit();
+          }
+        }}
+        placeholder="Ask an analytics question. The same prompt runs against both surfaces."
+        className="min-h-20 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
+        <span className="text-xs text-muted-foreground">
+          One prompt, both panes. Follow-ups continue each conversation separately.
+        </span>
+        <Button onClick={onSubmit} disabled={isRunning || !draft.trim()}>
+          <Play className="size-4" />
+          Race
+        </Button>
       </div>
-    </div>
-  );
-}
-
-function ReadoutPanel({ runs }: { runs: Record<Approach, BenchmarkRun> }) {
-  return (
-    <div className="min-h-0 overflow-hidden rounded-lg border border-border bg-card">
-      <div className="border-b border-border p-4">
-        <h2 className="text-base font-semibold">Readouts</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Latest turn metrics per integration.</p>
-      </div>
-      <div className="space-y-3 p-3">
-        {APPROACHES.map((approach) => {
-          const run = runs[approach];
-          const theme = getApproachTheme(approach);
-          return (
-            <div key={approach} className="rounded-md border border-border bg-background p-3">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full" style={{ background: theme.cssVar }} />
-                  <span className="text-sm font-medium">{theme.label}</span>
-                </div>
-                <Badge variant="outline">{run.status}</Badge>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <MetricPill icon={<Activity className="size-3.5" />} label="Input Tok" value={run.metrics.promptTokens} />
-                <MetricPill icon={<Activity className="size-3.5" />} label="Total Tok" value={run.metrics.totalTokens} />
-                <MetricPill icon={<FileText className="size-3.5" />} label="Sys Prompt" value={formatBytes(run.metrics.systemPromptBytes)} />
-                <MetricPill icon={<FileText className="size-3.5" />} label="Tool Prompt" value={formatBytes(run.metrics.toolPromptBytes)} />
-                <MetricPill icon={<Clock className="size-3.5" />} label="Latency" value={formatMs(run.metrics.latencyMs)} />
-                <MetricPill icon={<Code2 className="size-3.5" />} label="LOC" value={run.metrics.loc} />
-                <MetricPill icon={<Wrench className="size-3.5" />} label="Tools" value={run.metrics.toolCalls} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function MetricPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
-  return (
-    <div className="rounded-md border border-border bg-card px-2 py-2">
-      <div className="mb-1 flex items-center gap-1 text-muted-foreground">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <div className="truncate font-medium tabular-nums">{value}</div>
     </div>
   );
 }

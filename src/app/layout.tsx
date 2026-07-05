@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PostHog Integration Benchmark",
-  description: "Compare CLI, direct API, and MCP PostHog agent integrations.",
+  title: "HTTP CLI vs MCP",
+  description: "Give a remote server the ergonomics of a CLI: race an HTTP CLI endpoint against MCP on the same PostHog task.",
 };
 
 export default function RootLayout({
