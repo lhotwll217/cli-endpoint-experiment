@@ -12,8 +12,8 @@ import {
   Square,
   Wrench,
 } from "lucide-react";
-import type { Approach, BenchmarkRun, RunMetrics, ToolTrace } from "@/core/domain/benchmark";
-import { demoApproaches, getApproachTheme } from "@/config/theme.config";
+import { APPROACHES, type Approach, type BenchmarkRun, type RunMetrics, type ToolTrace } from "@/core/domain/benchmark";
+import { getApproachTheme } from "@/config/theme.config";
 import { type BenchmarkChatEntry, useBenchmarkChat } from "@/features/benchmark/use-benchmark-chat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,7 @@ export function BenchmarkDashboard() {
       return;
     }
     setDraft("");
-    await send(demoApproaches, prompt);
+    await send(APPROACHES, prompt);
   }
 
   return (
@@ -80,7 +80,7 @@ export function BenchmarkDashboard() {
           </header>
 
           <section className="grid min-h-0 gap-3 lg:grid-cols-2">
-            {demoApproaches.map((approach) => (
+            {APPROACHES.map((approach) => (
               <RacePane
                 key={approach}
                 approach={approach}

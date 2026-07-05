@@ -13,7 +13,6 @@ export type BenchmarkAction =
 export function createInitialBenchmarkState(prompt = ""): BenchmarkState {
   return {
     cli: createIdleRun("cli", prompt),
-    api: createIdleRun("api", prompt),
     mcp: createIdleRun("mcp", prompt),
   };
 }

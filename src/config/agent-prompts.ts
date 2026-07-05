@@ -14,11 +14,6 @@ const approachToolPrompts: Record<Approach, string> = {
     "For analytics questions, prefer discovering and using `posthog-cli exp query run` with a read-only SELECT query.",
     "The CLI is already authenticated and configured for the current PostHog project/environment.",
   ].join("\n"),
-  api: [
-    "You have typed PostHog API tools.",
-    "Use the available tool names and schemas to choose the smallest read-only API call that answers the user.",
-    "Return compact summaries rather than dumping raw JSON.",
-  ].join("\n"),
   mcp: [
     "You have PostHog MCP tools discovered from the MCP server at runtime.",
     "Use the discovered read-only tool names and schemas to choose the smallest call that answers the user.",
